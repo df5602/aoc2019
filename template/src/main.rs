@@ -1,6 +1,6 @@
 use std::env;
 
-use adhoc_derive::FromStr;
+//use adhoc_derive::FromStr;
 use aoc_util::input::{FileReader, FromFile};
 
 fn main() {

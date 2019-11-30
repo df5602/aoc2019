@@ -23,7 +23,7 @@ dependencies = [
 [[package]]
 name = "aoc-util"
 version = "0.1.0"
-source = "git+https://github.com/df5602/aoc-util#1c16d9684ad4434dd491d943f99ad2759ede9e36"
+source = "git+https://github.com/df5602/aoc-util#80735d3cb201f6ed3dc84b0aa3ef05ab1f40d5a8"
 
 [[package]]
 name = "lazy_static"
