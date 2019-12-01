@@ -11,7 +11,7 @@ fn main() {
         }
     };
 
-    let input: Vec<u32> = match FileReader::new().split_lines().read_from_file(input_file) {
+    let module_masses: Vec<u32> = match FileReader::new().split_lines().read_from_file(input_file) {
         Ok(input) => input,
         Err(e) => {
             println!("Error reading input: {}", e);
@@ -19,34 +19,35 @@ fn main() {
         }
     };
 
-    let fuel_requirements: i32 = input
-        .iter()
-        .map(|&module_weight| calculate_fuel_weight(module_weight))
-        .sum();
-    println!("Total fuel requirement: {}", fuel_requirements);
+    let fuel_requirements = fuel_requirements(&module_masses);
+    println!("Fuel requirement: {}", fuel_requirements);
 
-    let including_fuel: u32 = input
-        .iter()
-        .map(|&module_weight| calculate_fuel_weight_including_fuel(module_weight))
-        .sum();
+    let including_fuel = fuel_requirements_refined(&module_masses);
     println!("Fuel requirements (including fuel): {}", including_fuel);
 }
 
-fn calculate_fuel_weight(module_weight: u32) -> i32 {
-    module_weight as i32 / 3 - 2
+fn calculate_fuel(mass: u32) -> Option<u32> {
+    (mass / 3).checked_sub(2)
 }
 
-fn calculate_fuel_weight_including_fuel(module_weight: u32) -> u32 {
-    let mut total_fuel_weight = 0;
-    let mut fuel_weight = module_weight as i32;
-    loop {
-        fuel_weight = calculate_fuel_weight(fuel_weight as u32);
-        if fuel_weight <= 0 {
-            return total_fuel_weight;
-        } else {
-            total_fuel_weight += fuel_weight as u32;
-        }
-    }
+fn calculate_fuel_refined(mass: u32) -> u32 {
+    std::iter::successors(Some(mass), |&mass| calculate_fuel(mass))
+        .skip(1)
+        .sum()
+}
+
+fn fuel_requirements(module_masses: &[u32]) -> u32 {
+    module_masses
+        .iter()
+        .map(|&mass| calculate_fuel(mass).unwrap())
+        .sum()
+}
+
+fn fuel_requirements_refined(module_masses: &[u32]) -> u32 {
+    module_masses
+        .iter()
+        .map(|&mass| calculate_fuel_refined(mass))
+        .sum()
 }
 
 #[cfg(test)]
@@ -55,17 +56,17 @@ mod tests {
 
     #[test]
     fn fuel_weight() {
-        assert_eq!(2, calculate_fuel_weight(12));
-        assert_eq!(2, calculate_fuel_weight(14));
-        assert_eq!(654, calculate_fuel_weight(1969));
-        assert_eq!(33583, calculate_fuel_weight(100756));
+        assert_eq!(Some(2), calculate_fuel(12));
+        assert_eq!(Some(2), calculate_fuel(14));
+        assert_eq!(Some(654), calculate_fuel(1969));
+        assert_eq!(Some(33583), calculate_fuel(100756));
     }
 
     #[test]
     fn fuel_weight_including_fuel() {
-        assert_eq!(2, calculate_fuel_weight_including_fuel(14));
-        assert_eq!(966, calculate_fuel_weight_including_fuel(1969));
-        assert_eq!(50346, calculate_fuel_weight_including_fuel(100756));
+        assert_eq!(2, calculate_fuel_refined(14));
+        assert_eq!(966, calculate_fuel_refined(1969));
+        assert_eq!(50346, calculate_fuel_refined(100756));
     }
 
     #[test]
@@ -74,10 +75,7 @@ mod tests {
             .split_lines()
             .read_from_file("input.txt")
             .unwrap();
-        let fuel_requirements: i32 = input
-            .iter()
-            .map(|&module_weight| calculate_fuel_weight(module_weight))
-            .sum();
+        let fuel_requirements = fuel_requirements(&input);
         assert_eq!(3399394, fuel_requirements);
     }
 
@@ -87,10 +85,7 @@ mod tests {
             .split_lines()
             .read_from_file("input.txt")
             .unwrap();
-        let including_fuel: u32 = input
-            .iter()
-            .map(|&module_weight| calculate_fuel_weight_including_fuel(module_weight))
-            .sum();
+        let including_fuel = fuel_requirements_refined(&input);
         assert_eq!(5096223, including_fuel);
     }
 }
