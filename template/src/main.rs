@@ -24,3 +24,13 @@ fn main() {
         println!("{}", line);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // use super::*;
+
+    // #[test]
+    // fn it_works() {
+    //     assert!(1 < 2);
+    // }
+}
