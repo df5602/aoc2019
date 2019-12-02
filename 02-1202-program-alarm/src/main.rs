@@ -1,6 +1,5 @@
 use std::env;
 
-//use adhoc_derive::FromStr;
 use aoc_util::input::{FileReader, FromFile};
 
 fn main() {
@@ -20,19 +19,35 @@ fn main() {
         }
     };
 
-    let mut computer = Computer::new(&input);
-    let result = computer.run_program(12, 2);
-    println!("Result of program execution: {}", result);
+    println!(
+        "Result of program execution (1202): {}",
+        run_program(&input, 12, 2)
+    );
 
+    let output = 19_690_720;
+    let inputs = find_output(&input, output);
+    if let Some((a, b)) = inputs {
+        println!("Input to create output {}: {}", output, a * 100 + b)
+    } else {
+        println!("No inputs found that create desired output.");
+    }
+}
+
+fn run_program(input: &[u32], noun: u32, verb: u32) -> u32 {
+    let mut computer = Computer::new(&input);
+    computer.run_program(noun, verb)
+}
+
+fn find_output(input: &[u32], output: u32) -> Option<(u32, u32)> {
     for noun in 0..100 {
         for verb in 0..100 {
-            let mut computer = Computer::new(&input);
-            let result = computer.run_program(noun, verb);
-            if result == 19690720 {
-                println!("Noun: {}, verb: {}", noun, verb);
+            let result = run_program(&input, noun, verb);
+            if result == output {
+                return Some((noun, verb));
             }
         }
     }
+    None
 }
 
 struct Computer {
@@ -124,5 +139,24 @@ mod tests {
         let mut computer = Computer::new(&input);
         computer.run_program(1, 1);
         assert_eq!(vec![30, 1, 1, 4, 2, 5, 6, 0, 99], computer.tape);
+    }
+
+    #[test]
+    fn part_1() {
+        let input: Vec<u32> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+        assert_eq!(4945026, run_program(&input, 12, 2));
+    }
+
+    #[test]
+    fn part_2() {
+        let input: Vec<u32> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+        let inputs = find_output(&input, 19690720).unwrap();
+        assert_eq!(5296, inputs.0 * 100 + inputs.1);
     }
 }
