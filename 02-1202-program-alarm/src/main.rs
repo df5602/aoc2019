@@ -12,7 +12,7 @@ fn main() {
         }
     };
 
-    let mut input: Vec<u32> = match FileReader::new().split_char(',').read_from_file(input_file) {
+    let input: Vec<u32> = match FileReader::new().split_char(',').read_from_file(input_file) {
         Ok(input) => input,
         Err(e) => {
             println!("Error reading input: {}", e);
@@ -20,11 +20,19 @@ fn main() {
         }
     };
 
-    input[1] = 12;
-    input[2] = 2;
-    let mut computer = Computer::new(input);
-    let result = computer.run_program();
+    let mut computer = Computer::new(&input);
+    let result = computer.run_program(12, 2);
     println!("Result of program execution: {}", result);
+
+    for noun in 0..100 {
+        for verb in 0..100 {
+            let mut computer = Computer::new(&input);
+            let result = computer.run_program(noun, verb);
+            if result == 19690720 {
+                println!("Noun: {}, verb: {}", noun, verb);
+            }
+        }
+    }
 }
 
 struct Computer {
@@ -33,11 +41,16 @@ struct Computer {
 }
 
 impl Computer {
-    fn new(tape: Vec<u32>) -> Self {
-        Self { tape, pos: 0 }
+    fn new(tape: &[u32]) -> Self {
+        Self {
+            tape: tape.to_vec(),
+            pos: 0,
+        }
     }
 
-    fn run_program(&mut self) -> u32 {
+    fn run_program(&mut self, noun: u32, verb: u32) -> u32 {
+        self.tape[1] = noun;
+        self.tape[2] = verb;
         loop {
             let terminate = self.execute_instruction();
             if terminate {
@@ -84,32 +97,32 @@ mod tests {
     #[test]
     fn example_program_1() {
         let input = vec![1, 0, 0, 0, 99];
-        let mut computer = Computer::new(input);
-        computer.run_program();
+        let mut computer = Computer::new(&input);
+        computer.run_program(0, 0);
         assert_eq!(vec![2, 0, 0, 0, 99], computer.tape);
     }
 
     #[test]
     fn example_program_2() {
         let input = vec![2, 3, 0, 3, 99];
-        let mut computer = Computer::new(input);
-        computer.run_program();
+        let mut computer = Computer::new(&input);
+        computer.run_program(3, 0);
         assert_eq!(vec![2, 3, 0, 6, 99], computer.tape);
     }
 
     #[test]
     fn example_program_3() {
         let input = vec![2, 4, 4, 5, 99, 0];
-        let mut computer = Computer::new(input);
-        computer.run_program();
+        let mut computer = Computer::new(&input);
+        computer.run_program(4, 4);
         assert_eq!(vec![2, 4, 4, 5, 99, 9801], computer.tape);
     }
 
     #[test]
     fn example_program_4() {
         let input = vec![1, 1, 1, 4, 99, 5, 6, 0, 99];
-        let mut computer = Computer::new(input);
-        computer.run_program();
+        let mut computer = Computer::new(&input);
+        computer.run_program(1, 1);
         assert_eq!(vec![30, 1, 1, 4, 2, 5, 6, 0, 99], computer.tape);
     }
 }
