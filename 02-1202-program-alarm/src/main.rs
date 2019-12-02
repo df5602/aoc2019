@@ -19,10 +19,8 @@ fn main() {
         }
     };
 
-    println!(
-        "Result of program execution (1202): {}",
-        run_program(&input, 12, 2)
-    );
+    let result = run_program(&input, 12, 2);
+    println!("Result of program execution (1202): {}", result);
 
     let output = 19_690_720;
     let inputs = find_output(&input, output);
@@ -50,16 +48,25 @@ fn find_output(input: &[u32], output: u32) -> Option<(u32, u32)> {
     None
 }
 
+const ADD: u32 = 1;
+const MULTIPLY: u32 = 2;
+const HALT: u32 = 99;
+
+enum Status {
+    Continue,
+    Terminate,
+}
+
 struct Computer {
     tape: Vec<u32>,
-    pos: usize,
+    ip: usize,
 }
 
 impl Computer {
     fn new(tape: &[u32]) -> Self {
         Self {
             tape: tape.to_vec(),
-            pos: 0,
+            ip: 0,
         }
     }
 
@@ -67,8 +74,7 @@ impl Computer {
         self.tape[1] = noun;
         self.tape[2] = verb;
         loop {
-            let terminate = self.execute_instruction();
-            if terminate {
+            if let Status::Terminate = self.execute_instruction() {
                 break;
             }
             self.advance_program_counter();
@@ -77,29 +83,22 @@ impl Computer {
     }
 
     fn advance_program_counter(&mut self) {
-        self.pos += 4;
+        self.ip += 4;
     }
 
-    fn execute_instruction(&mut self) -> bool {
-        match self.tape[self.pos] {
-            1 => {
-                let a = self.tape[self.tape[self.pos + 1] as usize];
-                let b = self.tape[self.tape[self.pos + 2] as usize];
-                let output_pos = self.tape[self.pos + 3] as usize;
-                self.tape[output_pos] = a + b;
-                false
+    fn execute_instruction(&mut self) -> Status {
+        match self.tape[self.ip] {
+            opcode @ ADD | opcode @ MULTIPLY => {
+                let a = self.tape[self.tape[self.ip + 1] as usize];
+                let b = self.tape[self.tape[self.ip + 2] as usize];
+                let output_pos = self.tape[self.ip + 3] as usize;
+                self.tape[output_pos] = if opcode == ADD { a + b } else { a * b };
+                Status::Continue
             }
-            2 => {
-                let a = self.tape[self.tape[self.pos + 1] as usize];
-                let b = self.tape[self.tape[self.pos + 2] as usize];
-                let output_pos = self.tape[self.pos + 3] as usize;
-                self.tape[output_pos] = a * b;
-                false
-            }
-            99 => true,
+            HALT => Status::Terminate,
             _ => panic!(
                 "Invalid opcode ({}) at position {}!",
-                self.tape[self.pos], self.pos
+                self.tape[self.ip], self.ip
             ),
         }
     }
