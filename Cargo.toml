@@ -3,4 +3,5 @@
 members = [
     "template",
     "01-tyranny-of-the-rocket-equation",
+    "02-1202-program-alarm",
 ]
