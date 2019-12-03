@@ -42,78 +42,42 @@ fn main() {
     }
 }
 
-fn trace_path(path: &WirePath) -> HashMap<(isize, isize), u32> {
+fn trace_path(path: &WirePath) -> HashMap<Point, u32> {
     let mut map = HashMap::new();
 
-    let mut curr_x = 0;
-    let mut curr_y = 0;
-    let mut last_distance = 0;
+    let mut current = Point::new(0, 0);
+    let mut distance = 0;
 
     for segment in &path.segments {
-        match segment.direction {
-            Direction::Left => {
-                for x in (curr_x - segment.length as isize..curr_x).rev() {
-                    let dist = map.entry((x, curr_y)).or_insert(0);
-                    last_distance += 1;
-                    if *dist == 0 {
-                        *dist = last_distance;
-                    }
-                }
-                curr_x -= segment.length as isize;
-            }
-            Direction::Right => {
-                for x in curr_x + 1..=curr_x + segment.length as isize {
-                    let dist = map.entry((x, curr_y)).or_insert(0);
-                    last_distance += 1;
-                    if *dist == 0 {
-                        *dist = last_distance;
-                    }
-                }
-                curr_x += segment.length as isize;
-            }
-            Direction::Up => {
-                for y in curr_y + 1..=curr_y + segment.length as isize {
-                    let dist = map.entry((curr_x, y)).or_insert(0);
-                    last_distance += 1;
-                    if *dist == 0 {
-                        *dist = last_distance;
-                    }
-                }
-                curr_y += segment.length as isize;
-            }
-            Direction::Down => {
-                for y in (curr_y - segment.length as isize..curr_y).rev() {
-                    let dist = map.entry((curr_x, y)).or_insert(0);
-                    last_distance += 1;
-                    if *dist == 0 {
-                        *dist = last_distance;
-                    }
-                }
-                curr_y -= segment.length as isize;
-            }
+        for _ in 0..segment.length {
+            current = match segment.direction {
+                Direction::Left => Point::new(current.x - 1, current.y),
+                Direction::Right => Point::new(current.x + 1, current.y),
+                Direction::Up => Point::new(current.x, current.y + 1),
+                Direction::Down => Point::new(current.x, current.y - 1),
+            };
+            distance += 1;
+            map.entry(current).or_insert(distance);
         }
     }
 
     map
 }
 
-fn find_closest_intersection(
-    a: &HashMap<(isize, isize), u32>,
-    b: &HashMap<(isize, isize), u32>,
-) -> Option<isize> {
+fn find_closest_intersection(a: &HashMap<Point, u32>, b: &HashMap<Point, u32>) -> Option<i32> {
     map_intersection(a, b)
         .iter()
-        .map(|(x, y)| x.abs() + y.abs())
+        .map(|p| p.x.abs() + p.y.abs())
         .min()
 }
 
 fn find_fewest_steps_to_intersection(
-    a: &HashMap<(isize, isize), u32>,
-    b: &HashMap<(isize, isize), u32>,
+    a: &HashMap<Point, u32>,
+    b: &HashMap<Point, u32>,
 ) -> Option<u32> {
     map_intersection(a, b)
         .iter()
-        .map(|(x, y)| a.get(&(*x, *y)).unwrap() + b.get(&(*x, *y)).unwrap())
+        .map(|p| a.get(&p).unwrap() + b.get(&p).unwrap())
         .min()
 }
 
@@ -125,6 +89,18 @@ where
         .filter(|(k, _)| b.contains_key(k))
         .map(|(&k, _)| k)
         .collect()
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+impl Point {
+    fn new(x: i32, y: i32) -> Self {
+        Self { x, y }
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
