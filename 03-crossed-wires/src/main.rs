@@ -29,13 +29,14 @@ fn main() {
 
     let points_a = trace_path(&wire_paths[0]);
     let points_b = trace_path(&wire_paths[1]);
-    let closest = find_closest_intersection(&points_a, &points_b);
+    let intersections = map_intersection(&points_a, &points_b);
+    let closest = find_closest_intersection(&intersections);
     match closest {
         Some(distance) => println!("Distance to closest intersection: {}", distance),
         None => println!("No intersections found."),
     }
 
-    let fewest_steps = find_fewest_steps_to_intersection(&points_a, &points_b);
+    let fewest_steps = find_fewest_steps_to_intersection(&intersections, &points_a, &points_b);
     match fewest_steps {
         Some(steps) => println!("Fewest steps to intersection: {}", steps),
         None => println!("No intersections found."),
@@ -43,7 +44,8 @@ fn main() {
 }
 
 fn trace_path(path: &WirePath) -> HashMap<Point, u32> {
-    let mut map = HashMap::new();
+    // Pre-allocate to gain performance
+    let mut map = HashMap::with_capacity(path.segments.len() * 1000);
 
     let mut current = Point::new(0, 0);
     let mut distance = 0;
@@ -64,18 +66,16 @@ fn trace_path(path: &WirePath) -> HashMap<Point, u32> {
     map
 }
 
-fn find_closest_intersection(a: &HashMap<Point, u32>, b: &HashMap<Point, u32>) -> Option<i32> {
-    map_intersection(a, b)
-        .iter()
-        .map(|p| p.x.abs() + p.y.abs())
-        .min()
+fn find_closest_intersection(intersections: &[Point]) -> Option<i32> {
+    intersections.iter().map(|p| p.x.abs() + p.y.abs()).min()
 }
 
 fn find_fewest_steps_to_intersection(
+    intersections: &[Point],
     a: &HashMap<Point, u32>,
     b: &HashMap<Point, u32>,
 ) -> Option<u32> {
-    map_intersection(a, b)
+    intersections
         .iter()
         .map(|p| a.get(&p).unwrap() + b.get(&p).unwrap())
         .min()
@@ -178,7 +178,8 @@ mod tests {
 
         let points_a = trace_path(&wire_paths[0]);
         let points_b = trace_path(&wire_paths[1]);
-        assert_eq!(Some(159), find_closest_intersection(&points_a, &points_b));
+        let intersections = map_intersection(&points_a, &points_b);
+        assert_eq!(Some(159), find_closest_intersection(&intersections));
     }
 
     #[test]
@@ -194,7 +195,8 @@ mod tests {
 
         let points_a = trace_path(&wire_paths[0]);
         let points_b = trace_path(&wire_paths[1]);
-        assert_eq!(Some(135), find_closest_intersection(&points_a, &points_b));
+        let intersections = map_intersection(&points_a, &points_b);
+        assert_eq!(Some(135), find_closest_intersection(&intersections));
     }
 
     #[test]
@@ -210,9 +212,10 @@ mod tests {
 
         let points_a = trace_path(&wire_paths[0]);
         let points_b = trace_path(&wire_paths[1]);
+        let intersections = map_intersection(&points_a, &points_b);
         assert_eq!(
             Some(610),
-            find_fewest_steps_to_intersection(&points_a, &points_b)
+            find_fewest_steps_to_intersection(&intersections, &points_a, &points_b)
         );
     }
 
@@ -229,9 +232,10 @@ mod tests {
 
         let points_a = trace_path(&wire_paths[0]);
         let points_b = trace_path(&wire_paths[1]);
+        let intersections = map_intersection(&points_a, &points_b);
         assert_eq!(
             Some(410),
-            find_fewest_steps_to_intersection(&points_a, &points_b)
+            find_fewest_steps_to_intersection(&intersections, &points_a, &points_b)
         );
     }
 
@@ -251,7 +255,8 @@ mod tests {
 
         let points_a = trace_path(&wire_paths[0]);
         let points_b = trace_path(&wire_paths[1]);
-        let closest = find_closest_intersection(&points_a, &points_b);
+        let intersections = map_intersection(&points_a, &points_b);
+        let closest = find_closest_intersection(&intersections);
 
         assert_eq!(Some(8015), closest);
     }
@@ -272,7 +277,8 @@ mod tests {
 
         let points_a = trace_path(&wire_paths[0]);
         let points_b = trace_path(&wire_paths[1]);
-        let fewest_steps = find_fewest_steps_to_intersection(&points_a, &points_b);
+        let intersections = map_intersection(&points_a, &points_b);
+        let fewest_steps = find_fewest_steps_to_intersection(&intersections, &points_a, &points_b);
 
         assert_eq!(Some(163676), fewest_steps);
     }
