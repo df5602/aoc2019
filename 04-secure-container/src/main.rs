@@ -1,4 +1,5 @@
 use std::env;
+use std::io::Write;
 
 use aoc_util::input::{FileReader, FromFile};
 
@@ -23,13 +24,16 @@ fn main() {
     let min = input[0];
     let max = input[1];
 
-    let range = Range::new(min, max, true);
-    let count = (min..=max).filter(|&pwd| range.check_valid(pwd)).count();
+    let count = count_valid_passwords(min, max, true);
     println!("Different valid passwords: {}", count);
 
-    let range = Range::new(min, max, false);
-    let count = (min..=max).filter(|&pwd| range.check_valid(pwd)).count();
+    let count = count_valid_passwords(min, max, false);
     println!("Different valid passwords (no large groups): {}", count);
+}
+
+fn count_valid_passwords(min: u32, max: u32, allow_larger_group: bool) -> usize {
+    let range = Range::new(min, max, allow_larger_group);
+    (min..=max).filter(|&pwd| range.check_valid(pwd)).count()
 }
 
 #[derive(Debug)]
@@ -49,27 +53,32 @@ impl Range {
     }
 
     fn check_valid(&self, password: u32) -> bool {
-        let pwd_as_string = password.to_string();
+        // Check here to prevent buffer overflow when converting to digits
+        if !Range::six_digits(password) {
+            return false;
+        }
 
-        Range::six_digits(password)
-            && self.in_range(password)
-            && self.check_adjacent_digits(&pwd_as_string)
-            && Range::never_decrease(&pwd_as_string)
+        let mut digits = [0 as u8; 6];
+        write!(&mut digits[..], "{}", password).unwrap();
+
+        self.in_range(password)
+            && self.check_adjacent_digits(&digits)
+            && Range::never_decrease(&digits)
     }
 
     fn six_digits(password: u32) -> bool {
-        password > 9999 && password < 1_000_000
+        password > 99999 && password < 1_000_000
     }
 
     fn in_range(&self, password: u32) -> bool {
         password >= self.min && password <= self.max
     }
 
-    fn check_adjacent_digits(&self, password: &str) -> bool {
-        let mut previous = ' ';
+    fn check_adjacent_digits(&self, password: &[u8]) -> bool {
+        let mut previous = 0;
         let mut has_adjacent = false;
         let mut current_adjacent = 0;
-        for c in password.chars() {
+        for &c in password.iter() {
             if c == previous {
                 current_adjacent += 1;
                 has_adjacent = true;
@@ -84,9 +93,9 @@ impl Range {
         self.allow_larger_group && has_adjacent || current_adjacent == 1
     }
 
-    fn never_decrease(password: &str) -> bool {
-        let mut previous = '0';
-        for c in password.chars() {
+    fn never_decrease(password: &[u8]) -> bool {
+        let mut previous = 0;
+        for &c in password.iter() {
             if c < previous {
                 return false;
             }
@@ -103,36 +112,36 @@ mod tests {
     #[test]
     fn six_digit_number() {
         let range = Range::new(0, u32::max_value(), true);
-        assert!(!range.check_valid(9999));
-        assert!(range.check_valid(59999));
+        assert!(!range.check_valid(99999));
+        assert!(range.check_valid(599999));
         assert!(range.check_valid(999999));
         assert!(!range.check_valid(1222222));
     }
 
     #[test]
     fn within_range() {
-        let range = Range::new(23445, 45667, true);
-        assert!(!range.check_valid(23444));
-        assert!(range.check_valid(23445));
-        assert!(range.check_valid(44444));
-        assert!(range.check_valid(45667));
-        assert!(!range.check_valid(45668));
+        let range = Range::new(234456, 456677, true);
+        assert!(!range.check_valid(234455));
+        assert!(range.check_valid(234456));
+        assert!(range.check_valid(444444));
+        assert!(range.check_valid(456677));
+        assert!(!range.check_valid(456678));
     }
 
     #[test]
     fn adjacent_digits() {
-        let range = Range::new(30000, 50000, true);
-        assert!(!range.check_valid(34567));
-        assert!(range.check_valid(34447));
-        assert!(range.check_valid(34456));
+        let range = Range::new(300000, 500000, true);
+        assert!(!range.check_valid(345678));
+        assert!(range.check_valid(344478));
+        assert!(range.check_valid(344567));
     }
 
     #[test]
     fn never_decrease() {
-        let range = Range::new(30000, 50000, true);
-        assert!(!range.check_valid(43210));
-        assert!(range.check_valid(44444));
-        assert!(range.check_valid(45567));
+        let range = Range::new(300000, 500000, true);
+        assert!(!range.check_valid(432100));
+        assert!(range.check_valid(444444));
+        assert!(range.check_valid(455677));
     }
 
     #[test]
@@ -149,5 +158,33 @@ mod tests {
         assert!(range.check_valid(112233));
         assert!(!range.check_valid(123444));
         assert!(range.check_valid(111122));
+    }
+
+    #[test]
+    fn part_1() {
+        let input: Vec<u32> = FileReader::new()
+            .split_char('-')
+            .read_from_file("input.txt")
+            .unwrap();
+        assert_eq!(2, input.len());
+
+        let min = input[0];
+        let max = input[1];
+        let count = count_valid_passwords(min, max, true);
+        assert_eq!(1694, count);
+    }
+
+    #[test]
+    fn part_2() {
+        let input: Vec<u32> = FileReader::new()
+            .split_char('-')
+            .read_from_file("input.txt")
+            .unwrap();
+        assert_eq!(2, input.len());
+
+        let min = input[0];
+        let max = input[1];
+        let count = count_valid_passwords(min, max, false);
+        assert_eq!(1148, count);
     }
 }
