@@ -32,18 +32,18 @@ fn main() {
 }
 
 fn count_valid_passwords(min: u32, max: u32, allow_larger_group: bool) -> usize {
-    let range = Range::new(min, max, allow_larger_group);
-    (min..=max).filter(|&pwd| range.check_valid(pwd)).count()
+    let validator = Validator::new(min, max, allow_larger_group);
+    (min..=max).filter(|&pwd| validator.validate(pwd)).count()
 }
 
 #[derive(Debug)]
-struct Range {
+struct Validator {
     min: u32,
     max: u32,
     allow_larger_group: bool,
 }
 
-impl Range {
+impl Validator {
     fn new(min: u32, max: u32, allow_larger_group: bool) -> Self {
         Self {
             min,
@@ -52,9 +52,9 @@ impl Range {
         }
     }
 
-    fn check_valid(&self, password: u32) -> bool {
+    fn validate(&self, password: u32) -> bool {
         // Check here to prevent buffer overflow when converting to digits
-        if !Range::six_digits(password) {
+        if !Self::six_digits(password) {
             return false;
         }
 
@@ -63,7 +63,7 @@ impl Range {
 
         self.in_range(password)
             && self.check_adjacent_digits(&digits)
-            && Range::never_decrease(&digits)
+            && Self::never_decrease(&digits)
     }
 
     fn six_digits(password: u32) -> bool {
@@ -111,53 +111,53 @@ mod tests {
 
     #[test]
     fn six_digit_number() {
-        let range = Range::new(0, u32::max_value(), true);
-        assert!(!range.check_valid(99999));
-        assert!(range.check_valid(599999));
-        assert!(range.check_valid(999999));
-        assert!(!range.check_valid(1222222));
+        let range = Validator::new(0, u32::max_value(), true);
+        assert!(!range.validate(99999));
+        assert!(range.validate(599999));
+        assert!(range.validate(999999));
+        assert!(!range.validate(1222222));
     }
 
     #[test]
     fn within_range() {
-        let range = Range::new(234456, 456677, true);
-        assert!(!range.check_valid(234455));
-        assert!(range.check_valid(234456));
-        assert!(range.check_valid(444444));
-        assert!(range.check_valid(456677));
-        assert!(!range.check_valid(456678));
+        let range = Validator::new(234456, 456677, true);
+        assert!(!range.validate(234455));
+        assert!(range.validate(234456));
+        assert!(range.validate(444444));
+        assert!(range.validate(456677));
+        assert!(!range.validate(456678));
     }
 
     #[test]
     fn adjacent_digits() {
-        let range = Range::new(300000, 500000, true);
-        assert!(!range.check_valid(345678));
-        assert!(range.check_valid(344478));
-        assert!(range.check_valid(344567));
+        let range = Validator::new(300000, 500000, true);
+        assert!(!range.validate(345678));
+        assert!(range.validate(344478));
+        assert!(range.validate(344567));
     }
 
     #[test]
     fn never_decrease() {
-        let range = Range::new(300000, 500000, true);
-        assert!(!range.check_valid(432100));
-        assert!(range.check_valid(444444));
-        assert!(range.check_valid(455677));
+        let range = Validator::new(300000, 500000, true);
+        assert!(!range.validate(432100));
+        assert!(range.validate(444444));
+        assert!(range.validate(455677));
     }
 
     #[test]
     fn examples() {
-        let range = Range::new(0, u32::max_value(), true);
-        assert!(range.check_valid(111111));
-        assert!(!range.check_valid(223450));
-        assert!(!range.check_valid(123789));
+        let range = Validator::new(0, u32::max_value(), true);
+        assert!(range.validate(111111));
+        assert!(!range.validate(223450));
+        assert!(!range.validate(123789));
     }
 
     #[test]
     fn larger_groups() {
-        let range = Range::new(0, u32::max_value(), false);
-        assert!(range.check_valid(112233));
-        assert!(!range.check_valid(123444));
-        assert!(range.check_valid(111122));
+        let range = Validator::new(0, u32::max_value(), false);
+        assert!(range.validate(112233));
+        assert!(!range.validate(123444));
+        assert!(range.validate(111122));
     }
 
     #[test]
