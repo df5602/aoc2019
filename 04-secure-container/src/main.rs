@@ -20,23 +20,32 @@ fn main() {
     };
 
     assert_eq!(2, input.len());
-    let range = Range::new(input[0], input[1]);
+    let min = input[0];
+    let max = input[1];
 
-    let count = (input[0]..=input[1])
-        .filter(|&pwd| range.check_valid(pwd))
-        .count();
+    let range = Range::new(min, max, true);
+    let count = (min..=max).filter(|&pwd| range.check_valid(pwd)).count();
     println!("Different valid passwords: {}", count);
+
+    let range = Range::new(min, max, false);
+    let count = (min..=max).filter(|&pwd| range.check_valid(pwd)).count();
+    println!("Different valid passwords (no large groups): {}", count);
 }
 
 #[derive(Debug)]
 struct Range {
     min: u32,
     max: u32,
+    allow_larger_group: bool,
 }
 
 impl Range {
-    fn new(min: u32, max: u32) -> Self {
-        Self { min, max }
+    fn new(min: u32, max: u32, allow_larger_group: bool) -> Self {
+        Self {
+            min,
+            max,
+            allow_larger_group,
+        }
     }
 
     fn check_valid(&self, password: u32) -> bool {
@@ -44,27 +53,35 @@ impl Range {
 
         Range::six_digits(password)
             && self.in_range(password)
-            && Range::check_adjacent_digits(&pwd_as_string)
+            && self.check_adjacent_digits(&pwd_as_string)
             && Range::never_decrease(&pwd_as_string)
     }
 
     fn six_digits(password: u32) -> bool {
-        password > 9999 && password < 1000000
+        password > 9999 && password < 1_000_000
     }
 
     fn in_range(&self, password: u32) -> bool {
         password >= self.min && password <= self.max
     }
 
-    fn check_adjacent_digits(password: &str) -> bool {
+    fn check_adjacent_digits(&self, password: &str) -> bool {
         let mut previous = ' ';
+        let mut has_adjacent = false;
+        let mut current_adjacent = 0;
         for c in password.chars() {
             if c == previous {
-                return true;
+                current_adjacent += 1;
+                has_adjacent = true;
+            } else {
+                if current_adjacent == 1 {
+                    return true;
+                }
+                current_adjacent = 0;
             }
             previous = c;
         }
-        false
+        self.allow_larger_group && has_adjacent || current_adjacent == 1
     }
 
     fn never_decrease(password: &str) -> bool {
@@ -85,7 +102,7 @@ mod tests {
 
     #[test]
     fn six_digit_number() {
-        let range = Range::new(0, u32::max_value());
+        let range = Range::new(0, u32::max_value(), true);
         assert!(!range.check_valid(9999));
         assert!(range.check_valid(59999));
         assert!(range.check_valid(999999));
@@ -94,7 +111,7 @@ mod tests {
 
     #[test]
     fn within_range() {
-        let range = Range::new(23445, 45667);
+        let range = Range::new(23445, 45667, true);
         assert!(!range.check_valid(23444));
         assert!(range.check_valid(23445));
         assert!(range.check_valid(44444));
@@ -104,7 +121,7 @@ mod tests {
 
     #[test]
     fn adjacent_digits() {
-        let range = Range::new(30000, 50000);
+        let range = Range::new(30000, 50000, true);
         assert!(!range.check_valid(34567));
         assert!(range.check_valid(34447));
         assert!(range.check_valid(34456));
@@ -112,7 +129,7 @@ mod tests {
 
     #[test]
     fn never_decrease() {
-        let range = Range::new(30000, 50000);
+        let range = Range::new(30000, 50000, true);
         assert!(!range.check_valid(43210));
         assert!(range.check_valid(44444));
         assert!(range.check_valid(45567));
@@ -120,9 +137,17 @@ mod tests {
 
     #[test]
     fn examples() {
-        let range = Range::new(0, u32::max_value());
+        let range = Range::new(0, u32::max_value(), true);
         assert!(range.check_valid(111111));
         assert!(!range.check_valid(223450));
         assert!(!range.check_valid(123789));
+    }
+
+    #[test]
+    fn larger_groups() {
+        let range = Range::new(0, u32::max_value(), false);
+        assert!(range.check_valid(112233));
+        assert!(!range.check_valid(123444));
+        assert!(range.check_valid(111122));
     }
 }
