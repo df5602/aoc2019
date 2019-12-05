@@ -20,19 +20,30 @@ fn main() {
         }
     };
 
+    run_diagnostics(&program, 1);
+    run_diagnostics(&program, 5);
+}
+
+fn run_diagnostics(program: &[i32], system_id: u32) {
+    println!("Running diagnostics on system ID {}", system_id);
     let mut program_input = VecDeque::new();
-    program_input.push_back(1);
+    program_input.push_back(system_id as i32);
     let mut computer = Computer::new(&program, program_input);
     computer.run_program();
     for value in computer.output {
         println!("{}", value);
     }
+    println!();
 }
 
 const ADD: u32 = 1;
 const MULTIPLY: u32 = 2;
 const INPUT: u32 = 3;
 const OUTPUT: u32 = 4;
+const JUMP_IF_TRUE: u32 = 5;
+const JUMP_IF_FALSE: u32 = 6;
+const LESS_THAN: u32 = 7;
+const EQUALS: u32 = 8;
 const HALT: u32 = 99;
 
 #[derive(Debug, Copy, Clone)]
@@ -83,21 +94,7 @@ impl Computer {
     }
 
     fn run_program(&mut self) {
-        loop {
-            if let Status::Terminate = self.execute_instruction() {
-                break;
-            }
-            self.advance_instruction_pointer();
-        }
-    }
-
-    fn advance_instruction_pointer(&mut self) {
-        assert!(self.last_opcode != 0);
-        self.ip += match self.last_opcode {
-            ADD | MULTIPLY => 4,
-            INPUT | OUTPUT => 2,
-            _ => panic!("Could not advance IP, invalid opcode: {}", self.last_opcode),
-        };
+        while let Status::Continue = self.execute_instruction() {}
     }
 
     fn load_operand(&self, parameter: i32, mode: ParameterMode) -> i32 {
@@ -125,6 +122,7 @@ impl Computer {
                 let b = self.load_operand(self.tape[self.ip + 2], parameter_modes[1]);
                 let output_pos = self.tape[self.ip + 3] as usize;
                 self.tape[output_pos] = if opcode == ADD { a + b } else { a * b };
+                self.ip += 4;
                 Status::Continue
             }
             INPUT => {
@@ -135,11 +133,49 @@ impl Computer {
                 };
                 let output_pos = self.tape[self.ip + 1] as usize;
                 self.tape[output_pos] = input_value;
+                self.ip += 2;
                 Status::Continue
             }
             OUTPUT => {
                 let output_value = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
                 self.output.push(output_value);
+                self.ip += 2;
+                Status::Continue
+            }
+            JUMP_IF_TRUE => {
+                let condition = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
+                if condition != 0 {
+                    self.ip =
+                        self.load_operand(self.tape[self.ip + 2], parameter_modes[1]) as usize;
+                } else {
+                    self.ip += 3;
+                }
+                Status::Continue
+            }
+            JUMP_IF_FALSE => {
+                let condition = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
+                if condition == 0 {
+                    self.ip =
+                        self.load_operand(self.tape[self.ip + 2], parameter_modes[1]) as usize;
+                } else {
+                    self.ip += 3;
+                }
+                Status::Continue
+            }
+            LESS_THAN => {
+                let a = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
+                let b = self.load_operand(self.tape[self.ip + 2], parameter_modes[1]);
+                let output_pos = self.tape[self.ip + 3] as usize;
+                self.tape[output_pos] = if a < b { 1 } else { 0 };
+                self.ip += 4;
+                Status::Continue
+            }
+            EQUALS => {
+                let a = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
+                let b = self.load_operand(self.tape[self.ip + 2], parameter_modes[1]);
+                let output_pos = self.tape[self.ip + 3] as usize;
+                self.tape[output_pos] = if a == b { 1 } else { 0 };
+                self.ip += 4;
                 Status::Continue
             }
             HALT => Status::Terminate,
@@ -203,5 +239,32 @@ mod tests {
         let mut computer = Computer::new(&program, VecDeque::new());
         computer.run_program();
         assert_eq!(vec![1002, 4, 3, 4, 99], computer.tape);
+    }
+
+    #[test]
+    fn example_program_5() {
+        let program = vec![
+            3, 21, 1008, 21, 8, 20, 1005, 20, 22, 107, 8, 21, 20, 1006, 20, 31, 1106, 0, 36, 98, 0,
+            0, 1002, 21, 125, 20, 4, 20, 1105, 1, 46, 104, 999, 1105, 1, 46, 1101, 1000, 1, 20, 4,
+            20, 1105, 1, 46, 98, 99,
+        ];
+
+        let mut input = VecDeque::new();
+        input.push_back(7);
+        let mut computer = Computer::new(&program, input);
+        computer.run_program();
+        assert_eq!(vec![999], computer.output);
+
+        let mut input = VecDeque::new();
+        input.push_back(8);
+        let mut computer = Computer::new(&program, input);
+        computer.run_program();
+        assert_eq!(vec![1000], computer.output);
+
+        let mut input = VecDeque::new();
+        input.push_back(9);
+        let mut computer = Computer::new(&program, input);
+        computer.run_program();
+        assert_eq!(vec![1001], computer.output);
     }
 }
