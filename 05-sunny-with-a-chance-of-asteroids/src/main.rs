@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::convert::From;
 use std::env;
 
 use aoc_util::input::{FileReader, FromFile};
@@ -20,20 +21,44 @@ fn main() {
         }
     };
 
-    run_diagnostics(&program, 1);
-    run_diagnostics(&program, 5);
+    match run_diagnostics(&program, 1) {
+        Ok(_) => println!("OK\n"),
+        Err(_) => println!("ERROR\n"),
+    }
+    match run_diagnostics(&program, 5) {
+        Ok(_) => println!("OK\n"),
+        Err(_) => println!("ERROR\n"),
+    }
 }
 
-fn run_diagnostics(program: &[i32], system_id: u32) {
+macro_rules! queue {
+    ($($x:expr),*) => {
+        {
+            let mut q = VecDeque::new();
+            $(q.push_back($x);)*
+            q
+        }
+    };
+}
+
+fn run_diagnostics(program: &[i32], system_id: u32) -> Result<i32, i32> {
     println!("Running diagnostics on system ID {}", system_id);
-    let mut program_input = VecDeque::new();
-    program_input.push_back(system_id as i32);
-    let mut computer = Computer::new(&program, program_input);
+    let mut computer = Computer::new(&program, queue![system_id as i32]);
     computer.run_program();
-    for value in computer.output {
+
+    let mut result = Ok(0);
+    for (i, &value) in computer.output.iter().enumerate() {
         println!("{}", value);
+        if value != 0 && result.is_ok() {
+            if i == computer.output.len() - 1 {
+                result = Ok(value);
+            } else {
+                result = Err(value);
+            }
+        }
     }
-    println!();
+
+    result
 }
 
 const ADD: u32 = 1;
@@ -52,25 +77,19 @@ enum ParameterMode {
     Immediate,
 }
 
-impl ParameterMode {
-    fn from(value: u32) -> ParameterMode {
+impl From<u32> for ParameterMode {
+    fn from(value: u32) -> Self {
         match value {
             0 => ParameterMode::Position,
             1 => ParameterMode::Immediate,
-            mode @ _ => panic!("Invalid parameter mode: {}", mode),
-        }
-    }
-
-    fn as_u32(self) -> u32 {
-        match self {
-            ParameterMode::Position => 0,
-            ParameterMode::Immediate => 1,
+            mode => panic!("Invalid parameter mode: {}", mode),
         }
     }
 }
 
-enum Status {
-    Continue,
+enum NextState {
+    ContinueAbsolute(usize),
+    ContinueRelative(isize),
     Terminate,
 }
 
@@ -79,7 +98,6 @@ struct Computer {
     input: VecDeque<i32>,
     output: Vec<i32>,
     ip: usize,
-    last_opcode: u32,
 }
 
 impl Computer {
@@ -89,41 +107,60 @@ impl Computer {
             input,
             output: Vec::new(),
             ip: 0,
-            last_opcode: 0,
         }
     }
 
     fn run_program(&mut self) {
-        while let Status::Continue = self.execute_instruction() {}
-    }
-
-    fn load_operand(&self, parameter: i32, mode: ParameterMode) -> i32 {
-        match mode {
-            ParameterMode::Position => self.tape[parameter as usize],
-            ParameterMode::Immediate => parameter,
+        loop {
+            match self.execute_instruction() {
+                NextState::ContinueAbsolute(offset) => self.ip = offset,
+                NextState::ContinueRelative(offset) => {
+                    self.ip = (self.ip as isize + offset) as usize
+                }
+                NextState::Terminate => break,
+            }
         }
     }
 
-    fn execute_instruction(&mut self) -> Status {
-        let mut parameter_modes = [ParameterMode::Position; 2];
+    fn load_operand(&self, offset: usize, mode: ParameterMode) -> i32 {
+        match mode {
+            ParameterMode::Position => self.tape[self.tape[offset] as usize],
+            ParameterMode::Immediate => self.tape[offset],
+        }
+    }
+
+    fn should_jump(condition: i32, opcode: u32) -> bool {
+        match opcode {
+            JUMP_IF_TRUE => condition != 0,
+            JUMP_IF_FALSE => condition == 0,
+            _ => panic!("Unexpected opcode: {}", opcode),
+        }
+    }
+
+    fn operation(a: i32, b: i32, opcode: u32) -> i32 {
+        match opcode {
+            ADD => a + b,
+            MULTIPLY => a * b,
+            LESS_THAN => (a < b) as i32,
+            EQUALS => (a == b) as i32,
+            _ => panic!("Unexpected opcode: {}", opcode),
+        }
+    }
+
+    fn execute_instruction(&mut self) -> NextState {
         let instruction = self.tape[self.ip] as u32;
-
         let opcode = instruction % 100;
-        self.last_opcode = opcode;
-
-        parameter_modes[0] = ParameterMode::from(((1000 + instruction - opcode) % 1000) / 100);
-        parameter_modes[1] = ParameterMode::from(
-            ((10000 + instruction - opcode - parameter_modes[0].as_u32() * 100) % 10000) / 1000,
-        );
+        let mut modes = [ParameterMode::Position; 2];
+        modes[0] = ParameterMode::from((instruction / 100) % 10);
+        modes[1] = ParameterMode::from((instruction / 1000) % 10);
 
         match opcode {
-            ADD | MULTIPLY => {
-                let a = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
-                let b = self.load_operand(self.tape[self.ip + 2], parameter_modes[1]);
+            ADD | MULTIPLY | LESS_THAN | EQUALS => {
+                let a = self.load_operand(self.ip + 1, modes[0]);
+                let b = self.load_operand(self.ip + 2, modes[1]);
                 let output_pos = self.tape[self.ip + 3] as usize;
-                self.tape[output_pos] = if opcode == ADD { a + b } else { a * b };
-                self.ip += 4;
-                Status::Continue
+                self.tape[output_pos] = Self::operation(a, b, opcode);
+                NextState::ContinueRelative(4)
             }
             INPUT => {
                 let input_value = self.input.pop_front();
@@ -133,52 +170,23 @@ impl Computer {
                 };
                 let output_pos = self.tape[self.ip + 1] as usize;
                 self.tape[output_pos] = input_value;
-                self.ip += 2;
-                Status::Continue
+                NextState::ContinueRelative(2)
             }
             OUTPUT => {
-                let output_value = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
+                let output_value = self.load_operand(self.ip + 1, modes[0]);
                 self.output.push(output_value);
-                self.ip += 2;
-                Status::Continue
+                NextState::ContinueRelative(2)
             }
-            JUMP_IF_TRUE => {
-                let condition = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
-                if condition != 0 {
-                    self.ip =
-                        self.load_operand(self.tape[self.ip + 2], parameter_modes[1]) as usize;
+            JUMP_IF_TRUE | JUMP_IF_FALSE => {
+                let condition = self.load_operand(self.ip + 1, modes[0]);
+                if Self::should_jump(condition, opcode) {
+                    let next_ip = self.load_operand(self.ip + 2, modes[1]) as usize;
+                    NextState::ContinueAbsolute(next_ip)
                 } else {
-                    self.ip += 3;
+                    NextState::ContinueRelative(3)
                 }
-                Status::Continue
             }
-            JUMP_IF_FALSE => {
-                let condition = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
-                if condition == 0 {
-                    self.ip =
-                        self.load_operand(self.tape[self.ip + 2], parameter_modes[1]) as usize;
-                } else {
-                    self.ip += 3;
-                }
-                Status::Continue
-            }
-            LESS_THAN => {
-                let a = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
-                let b = self.load_operand(self.tape[self.ip + 2], parameter_modes[1]);
-                let output_pos = self.tape[self.ip + 3] as usize;
-                self.tape[output_pos] = if a < b { 1 } else { 0 };
-                self.ip += 4;
-                Status::Continue
-            }
-            EQUALS => {
-                let a = self.load_operand(self.tape[self.ip + 1], parameter_modes[0]);
-                let b = self.load_operand(self.tape[self.ip + 2], parameter_modes[1]);
-                let output_pos = self.tape[self.ip + 3] as usize;
-                self.tape[output_pos] = if a == b { 1 } else { 0 };
-                self.ip += 4;
-                Status::Continue
-            }
-            HALT => Status::Terminate,
+            HALT => NextState::Terminate,
             _ => panic!(
                 "Invalid opcode ({}) at position {}!",
                 self.tape[self.ip], self.ip
@@ -226,9 +234,7 @@ mod tests {
     #[test]
     fn input_output() {
         let program = vec![3, 0, 4, 0, 99];
-        let mut input = VecDeque::new();
-        input.push_back(42);
-        let mut computer = Computer::new(&program, input);
+        let mut computer = Computer::new(&program, queue![42]);
         computer.run_program();
         assert_eq!(vec![42], computer.output);
     }
@@ -249,22 +255,34 @@ mod tests {
             20, 1105, 1, 46, 98, 99,
         ];
 
-        let mut input = VecDeque::new();
-        input.push_back(7);
-        let mut computer = Computer::new(&program, input);
+        let mut computer = Computer::new(&program, queue![7]);
         computer.run_program();
         assert_eq!(vec![999], computer.output);
 
-        let mut input = VecDeque::new();
-        input.push_back(8);
-        let mut computer = Computer::new(&program, input);
+        let mut computer = Computer::new(&program, queue![8]);
         computer.run_program();
         assert_eq!(vec![1000], computer.output);
 
-        let mut input = VecDeque::new();
-        input.push_back(9);
-        let mut computer = Computer::new(&program, input);
+        let mut computer = Computer::new(&program, queue![9]);
         computer.run_program();
         assert_eq!(vec![1001], computer.output);
+    }
+
+    #[test]
+    fn part_1() {
+        let program: Vec<i32> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+        assert_eq!(Ok(7286649), run_diagnostics(&program, 1));
+    }
+
+    #[test]
+    fn part_2() {
+        let program: Vec<i32> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+        assert_eq!(Ok(15724522), run_diagnostics(&program, 5));
     }
 }
