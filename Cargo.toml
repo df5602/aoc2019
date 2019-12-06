@@ -7,4 +7,5 @@ members = [
     "03-crossed-wires",
     "04-secure-container",
     "05-sunny-with-a-chance-of-asteroids",
+    "06-universal-orbit-map",
 ]
