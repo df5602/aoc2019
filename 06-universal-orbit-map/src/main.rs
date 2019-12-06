@@ -24,6 +24,9 @@ fn main() {
     let graph = Graph::construct_graph(&orbits);
     let number_of_orbits = graph.count_orbits();
     println!("Number of orbits: {}", number_of_orbits);
+
+    let minimal_distance = graph.minimal_distance("YOU", "SAN");
+    println!("Minimal distance: {}", minimal_distance - 2);
 }
 
 #[derive(Debug, FromStr)]
@@ -36,6 +39,7 @@ struct Orbit {
 #[derive(Debug)]
 struct Node {
     object: String,
+    parent: String,
     children: Vec<String>,
 }
 
@@ -51,15 +55,20 @@ impl Graph {
             nodes: HashMap::new(),
         };
         for orbit in orbits {
-            graph.nodes.entry(orbit.object.clone()).or_insert(Node {
+            let node = graph.nodes.entry(orbit.object.clone()).or_insert(Node {
                 object: orbit.object.clone(),
+                parent: String::new(),
                 children: Vec::new(),
             });
+            assert!(node.parent.is_empty());
+            node.parent = orbit.center.clone();
+
             let parent = graph.nodes.entry(orbit.center.clone()).or_insert(Node {
                 object: orbit.center.clone(),
+                parent: String::new(),
                 children: Vec::new(),
             });
-            (*parent).children.push(orbit.object.clone());
+            parent.children.push(orbit.object.clone());
         }
         graph
     }
@@ -76,6 +85,43 @@ impl Graph {
             sum += self.count_depth(&node, depth + 1);
         }
         sum
+    }
+
+    fn minimal_distance(&self, from: &str, to: &str) -> usize {
+        let mut visited: HashMap<String, usize> = HashMap::new();
+
+        // Start at from node and go up the parents
+        let mut distance = 0;
+        let mut current = self.nodes.get(from).unwrap();
+        visited.insert(current.object.clone(), distance);
+
+        loop {
+            if current.parent.is_empty() {
+                break;
+            }
+            current = self.nodes.get(&current.parent).unwrap();
+
+            distance += 1;
+            visited.insert(current.object.clone(), distance);
+        }
+
+        // Start at to node and go up the parents
+        distance = 0;
+        current = self.nodes.get(to).unwrap();
+
+        loop {
+            if visited.contains_key(&current.object) {
+                return distance + visited.get(&current.object).unwrap();
+            }
+
+            distance += 1;
+            current = self.nodes.get(&current.parent).unwrap();
+            if current.parent.is_empty() {
+                break;
+            }
+        }
+
+        0
     }
 }
 
