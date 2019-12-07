@@ -38,61 +38,53 @@ macro_rules! queue {
 }
 
 fn run_amplifier_program(
-    name: &str,
+    id: usize,
     program: &[i32],
     input: Receiver<i32>,
     output: Sender<i32>,
 ) -> i32 {
-    let mut computer = Computer::new(name, program, input, output);
+    let mut computer = Computer::new(id, program, input, output);
     computer.run_program();
     computer.last_output
 }
 
-fn run_amplifier_chain(program: &[i32], phase_settings: &[u8; 5], initial_input: i32) -> i32 {
-    let (tx_a, rx_b) = channel();
-    tx_a.send(phase_settings[1] as i32).unwrap();
-    let (tx_b, rx_c) = channel();
-    tx_b.send(phase_settings[2] as i32).unwrap();
-    let (tx_c, rx_d) = channel();
-    tx_c.send(phase_settings[3] as i32).unwrap();
-    let (tx_d, rx_e) = channel();
-    tx_d.send(phase_settings[4] as i32).unwrap();
-    let (tx_e, rx_a) = channel();
-    tx_e.send(phase_settings[0] as i32).unwrap();
-    tx_e.send(initial_input).unwrap();
-
-    let (result_tx, result_rx) = channel();
-
+fn run_amplifier_chain_with_feedback(
+    program: &[i32],
+    phase_settings: [u8; 5],
+    initial_input: i32,
+) -> i32 {
     thread::scope(|s| {
-        let mut handles = Vec::new();
-        let handle = s.spawn(move |_| {
-            run_amplifier_program("A", program, rx_a, tx_a);
-        });
-        handles.push(handle);
-        let handle = s.spawn(move |_| {
-            run_amplifier_program("B", program, rx_b, tx_b);
-        });
-        handles.push(handle);
-        let handle = s.spawn(move |_| {
-            run_amplifier_program("C", program, rx_c, tx_c);
-        });
-        handles.push(handle);
-        let handle = s.spawn(move |_| {
-            run_amplifier_program("D", program, rx_d, tx_d);
-        });
-        handles.push(handle);
-        let handle = s.spawn(move |_| {
-            let thruster_input = run_amplifier_program("E", program, rx_e, tx_e);
-            result_tx.send(thruster_input).unwrap();
-        });
-        handles.push(handle);
+        let mut txs = Vec::with_capacity(5);
+        let mut rxs = Vec::with_capacity(5);
 
-        for handle in handles {
-            handle.join().unwrap();
+        for i in 0..5 {
+            let (tx, rx) = channel();
+            tx.send(phase_settings[(i + 1) % 5] as i32).unwrap();
+            txs.push(tx);
+            rxs.push(rx);
         }
+
+        txs[4].send(initial_input).unwrap();
+
+        let mut handles = Vec::with_capacity(5);
+        for i in 0..5 {
+            // Needed to pull a few tricks to be able to move the senders/receivers into the closure.
+            // The indices of Vec::remove() below take into account the fact, that an entry was just
+            // removed from the vector during the previous iteration.
+            // TODO: might be more readable using a VecDeque for this...
+            let (tx, rx) = (txs.remove(0), rxs.remove(if i < 4 { 1 } else { 0 }));
+            let handle = s.spawn(move |_| run_amplifier_program(i, program, rx, tx));
+            handles.push(handle);
+        }
+
+        let mut result = 0;
+        for handle in handles {
+            result = handle.join().unwrap();
+        }
+
+        result
     })
-    .unwrap();
-    result_rx.recv().unwrap()
+    .unwrap()
 }
 
 fn find_best_phase_settings(program: &[i32], initial_input: i32) -> i32 {
@@ -102,8 +94,11 @@ fn find_best_phase_settings(program: &[i32], initial_input: i32) -> i32 {
             for c in (5..10).filter(|&c| c != a && c != b) {
                 for d in (5..10).filter(|&d| d != a && d != b && d != c) {
                     for e in (5..10).filter(|&e| e != a && e != b && e != c && e != d) {
-                        let thruster_input =
-                            run_amplifier_chain(program, &[a, b, c, d, e], initial_input);
+                        let thruster_input = run_amplifier_chain_with_feedback(
+                            program,
+                            [a, b, c, d, e],
+                            initial_input,
+                        );
                         if thruster_input > highest_thruster_value {
                             highest_thruster_value = thruster_input
                         }
@@ -149,7 +144,7 @@ enum NextState {
 }
 
 struct Computer {
-    name: String,
+    id: usize,
     tape: Vec<i32>,
     input: Receiver<i32>,
     output: Sender<i32>,
@@ -158,9 +153,9 @@ struct Computer {
 }
 
 impl Computer {
-    fn new(name: &str, program: &[i32], input: Receiver<i32>, output: Sender<i32>) -> Self {
+    fn new(id: usize, program: &[i32], input: Receiver<i32>, output: Sender<i32>) -> Self {
         Self {
-            name: name.to_owned(),
+            id,
             tape: program.to_vec(),
             input,
             output,
@@ -235,9 +230,9 @@ impl Computer {
                 let output_value = self.load_operand(self.ip + 1, modes[0]);
                 match self.output.send(output_value) {
                     Ok(_) => {}
-                    Err(e) => {
+                    Err(_) => {
                         self.last_output = output_value;
-                        println!("[{}] OUTPUT: {}", self.name, output_value);
+                        println!("[{}] OUTPUT: {}", self.id, output_value);
                     }
                 }
                 NextState::ContinueRelative(2)
@@ -252,7 +247,7 @@ impl Computer {
                 }
             }
             HALT => {
-                println!("[{}] HALT", self.name);
+                println!("[{}] HALT", self.id);
                 NextState::Terminate
             }
             _ => panic!(
