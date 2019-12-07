@@ -44,8 +44,7 @@ fn run_amplifier_program(
     output: Sender<i32>,
 ) -> i32 {
     let mut computer = Computer::new(id, program, input, output);
-    computer.run_program();
-    computer.last_output
+    computer.run_program()
 }
 
 fn run_amplifier_chain_with_feedback(
@@ -89,26 +88,45 @@ fn run_amplifier_chain_with_feedback(
 
 fn find_best_phase_settings(program: &[i32], initial_input: i32) -> i32 {
     let mut highest_thruster_value = 0;
-    for a in 5..10 {
-        for b in (5..10).filter(|&b| b != a) {
-            for c in (5..10).filter(|&c| c != a && c != b) {
-                for d in (5..10).filter(|&d| d != a && d != b && d != c) {
-                    for e in (5..10).filter(|&e| e != a && e != b && e != c && e != d) {
-                        let thruster_input = run_amplifier_chain_with_feedback(
-                            program,
-                            [a, b, c, d, e],
-                            initial_input,
-                        );
-                        if thruster_input > highest_thruster_value {
-                            highest_thruster_value = thruster_input
-                        }
-                    }
-                }
-            }
-        }
+
+    let mut phase_settings = [5, 6, 7, 8, 9];
+    // Create iterator that generates all permutations
+    let permutations = permutohedron::Heap::new(&mut phase_settings);
+    for phase_setting in permutations {
+        let thruster_input =
+            run_amplifier_chain_with_feedback(program, phase_setting, initial_input);
+        highest_thruster_value = i32::max(thruster_input, highest_thruster_value);
     }
 
     highest_thruster_value
+}
+
+trait Input<T> {
+    type ReadError;
+    // Blocking read.
+    fn read(&self) -> Result<T, Self::ReadError>;
+}
+
+impl<T> Input<T> for Receiver<T> {
+    type ReadError = std::sync::mpsc::RecvError;
+
+    fn read(&self) -> Result<T, Self::ReadError> {
+        self.recv()
+    }
+}
+
+trait Output<T> {
+    type WriteError;
+    // Blocking write.
+    fn write(&mut self, t: T) -> Result<(), Self::WriteError>;
+}
+
+impl<T> Output<T> for Sender<T> {
+    type WriteError = std::sync::mpsc::SendError<T>;
+
+    fn write(&mut self, t: T) -> Result<(), Self::WriteError> {
+        self.send(t)
+    }
 }
 
 const ADD: u32 = 1;
@@ -143,19 +161,22 @@ enum NextState {
     Terminate,
 }
 
-struct Computer {
-    id: usize,
+struct Computer<I: Input<i32>, O: Output<i32>> {
+    _id: usize,
     tape: Vec<i32>,
-    input: Receiver<i32>,
-    output: Sender<i32>,
+    input: I,
+    output: O,
     last_output: i32,
     ip: usize,
 }
 
-impl Computer {
-    fn new(id: usize, program: &[i32], input: Receiver<i32>, output: Sender<i32>) -> Self {
+impl<I: Input<i32>, O: Output<i32>> Computer<I, O>
+where
+    I::ReadError: std::fmt::Debug,
+{
+    fn new(id: usize, program: &[i32], input: I, output: O) -> Self {
         Self {
-            id,
+            _id: id,
             tape: program.to_vec(),
             input,
             output,
@@ -164,7 +185,7 @@ impl Computer {
         }
     }
 
-    fn run_program(&mut self) {
+    fn run_program(&mut self) -> i32 {
         loop {
             match self.execute_instruction() {
                 NextState::ContinueAbsolute(offset) => self.ip = offset,
@@ -174,6 +195,7 @@ impl Computer {
                 NextState::Terminate => break,
             }
         }
+        self.last_output
     }
 
     fn load_operand(&self, offset: usize, mode: ParameterMode) -> i32 {
@@ -217,7 +239,7 @@ impl Computer {
                 NextState::ContinueRelative(4)
             }
             INPUT => {
-                let input_value = self.input.recv();
+                let input_value = self.input.read();
                 let input_value = match input_value {
                     Ok(input_value) => input_value,
                     Err(e) => panic!("Error receiving input: {:?}", e),
@@ -228,13 +250,8 @@ impl Computer {
             }
             OUTPUT => {
                 let output_value = self.load_operand(self.ip + 1, modes[0]);
-                match self.output.send(output_value) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        self.last_output = output_value;
-                        println!("[{}] OUTPUT: {}", self.id, output_value);
-                    }
-                }
+                let _ = self.output.write(output_value);
+                self.last_output = output_value;
                 NextState::ContinueRelative(2)
             }
             JUMP_IF_TRUE | JUMP_IF_FALSE => {
@@ -246,10 +263,7 @@ impl Computer {
                     NextState::ContinueRelative(3)
                 }
             }
-            HALT => {
-                println!("[{}] HALT", self.id);
-                NextState::Terminate
-            }
+            HALT => NextState::Terminate,
             _ => panic!(
                 "Invalid opcode ({}) at position {}!",
                 self.tape[self.ip], self.ip
@@ -359,4 +373,35 @@ mod tests {
         let thruster_input = find_best_phase_settings(&program, 0);
         assert_eq!(65210, thruster_input);
     }*/
+
+    #[test]
+    fn amplifier_feedback_example_1() {
+        let program = vec![
+            3, 26, 1001, 26, -4, 26, 3, 27, 1002, 27, 2, 27, 1, 27, 26, 27, 4, 27, 1001, 28, -1,
+            28, 1005, 28, 6, 99, 0, 0, 5,
+        ];
+        let thruster_input = find_best_phase_settings(&program, 0);
+        assert_eq!(139629729, thruster_input);
+    }
+
+    #[test]
+    fn amplifier_feedback_example_2() {
+        let program = vec![
+            3, 52, 1001, 52, -5, 52, 3, 53, 1, 52, 56, 54, 1007, 54, 5, 55, 1005, 55, 26, 1001, 54,
+            -5, 54, 1105, 1, 12, 1, 53, 54, 53, 1008, 54, 0, 55, 1001, 55, 1, 55, 2, 53, 55, 53, 4,
+            53, 1001, 56, -1, 56, 1005, 56, 6, 99, 0, 0, 0, 0, 10,
+        ];
+        let thruster_input = find_best_phase_settings(&program, 0);
+        assert_eq!(18216, thruster_input);
+    }
+
+    #[test]
+    fn part_2() {
+        let program: Vec<i32> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+        let thruster_input = find_best_phase_settings(&program, 0);
+        assert_eq!(15432220, thruster_input);
+    }
 }

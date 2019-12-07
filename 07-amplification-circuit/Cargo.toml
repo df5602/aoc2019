@@ -9,3 +9,4 @@ edition = "2018"
 [dependencies]
 aoc-util = { git = "https://github.com/df5602/aoc-util" }
 crossbeam = "0.7"
+permutohedron = "0.2"
