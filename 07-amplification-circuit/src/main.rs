@@ -6,6 +6,9 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use aoc_util::input::{FileReader, FromFile};
 use crossbeam::thread;
 
+const PHASE_SETTINGS: [u8; 5] = [0, 1, 2, 3, 4];
+const PHASE_SETTINGS_FEEDBACK: [u8; 5] = [5, 6, 7, 8, 9];
+
 fn main() {
     let input_file = match env::args().nth(1) {
         Some(input_file) => input_file,
@@ -23,8 +26,11 @@ fn main() {
         }
     };
 
-    let thruster_input = find_best_phase_settings(&program, 0);
+    let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS, false);
     println!("Best thruster input: {}", thruster_input);
+
+    let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS_FEEDBACK, true);
+    println!("Best thruster input (with feedback): {}", thruster_input);
 }
 
 macro_rules! queue {
@@ -37,14 +43,30 @@ macro_rules! queue {
     };
 }
 
-fn run_amplifier_program(
+fn run_amplifier_program<I: Input<i32>, O: Output<i32>>(
     id: usize,
     program: &[i32],
-    input: Receiver<i32>,
-    output: Sender<i32>,
-) -> i32 {
+    input: I,
+    output: O,
+) -> i32
+where
+    I::ReadError: std::fmt::Debug,
+{
     let mut computer = Computer::new(id, program, input, output);
     computer.run_program()
+}
+
+fn run_amplifier_chain(program: &[i32], phase_settings: [u8; 5], initial_input: i32) -> i32 {
+    let mut next_input = initial_input;
+    for (i, &phase_setting) in phase_settings.iter().enumerate() {
+        next_input = run_amplifier_program(
+            i,
+            program,
+            queue![phase_setting as i32, next_input],
+            Vec::new(),
+        );
+    }
+    next_input
 }
 
 fn run_amplifier_chain_with_feedback(
@@ -86,15 +108,21 @@ fn run_amplifier_chain_with_feedback(
     .unwrap()
 }
 
-fn find_best_phase_settings(program: &[i32], initial_input: i32) -> i32 {
+fn find_best_phase_settings(
+    program: &[i32],
+    initial_input: i32,
+    mut phase_settings: [u8; 5],
+    feedback: bool,
+) -> i32 {
     let mut highest_thruster_value = 0;
-
-    let mut phase_settings = [5, 6, 7, 8, 9];
     // Create iterator that generates all permutations
     let permutations = permutohedron::Heap::new(&mut phase_settings);
     for phase_setting in permutations {
-        let thruster_input =
-            run_amplifier_chain_with_feedback(program, phase_setting, initial_input);
+        let thruster_input = if feedback {
+            run_amplifier_chain_with_feedback(program, phase_setting, initial_input)
+        } else {
+            run_amplifier_chain(program, phase_setting, initial_input)
+        };
         highest_thruster_value = i32::max(thruster_input, highest_thruster_value);
     }
 
@@ -104,14 +132,25 @@ fn find_best_phase_settings(program: &[i32], initial_input: i32) -> i32 {
 trait Input<T> {
     type ReadError;
     // Blocking read.
-    fn read(&self) -> Result<T, Self::ReadError>;
+    fn read(&mut self) -> Result<T, Self::ReadError>;
 }
 
 impl<T> Input<T> for Receiver<T> {
     type ReadError = std::sync::mpsc::RecvError;
 
-    fn read(&self) -> Result<T, Self::ReadError> {
+    fn read(&mut self) -> Result<T, Self::ReadError> {
         self.recv()
+    }
+}
+
+impl<T> Input<T> for VecDeque<T> {
+    type ReadError = String;
+
+    fn read(&mut self) -> Result<T, Self::ReadError> {
+        match self.pop_front() {
+            Some(t) => Ok(t),
+            None => Err(String::from("Queue is empty.")),
+        }
     }
 }
 
@@ -126,6 +165,15 @@ impl<T> Output<T> for Sender<T> {
 
     fn write(&mut self, t: T) -> Result<(), Self::WriteError> {
         self.send(t)
+    }
+}
+
+impl<T> Output<T> for Vec<T> {
+    type WriteError = ();
+
+    fn write(&mut self, t: T) -> Result<(), Self::WriteError> {
+        self.push(t);
+        Ok(())
     }
 }
 
@@ -276,10 +324,17 @@ where
 mod tests {
     use super::*;
 
-    /*#[test]
+    impl<T> Output<T> for () {
+        type WriteError = ();
+        fn write(&mut self, _t: T) -> Result<(), Self::WriteError> {
+            Ok(())
+        }
+    }
+
+    #[test]
     fn example_program_1() {
         let program = vec![1, 0, 0, 0, 99];
-        let mut computer = Computer::new(&program, VecDeque::new());
+        let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
         assert_eq!(vec![2, 0, 0, 0, 99], computer.tape);
     }
@@ -287,7 +342,7 @@ mod tests {
     #[test]
     fn example_program_2() {
         let program = vec![2, 3, 0, 3, 99];
-        let mut computer = Computer::new(&program, VecDeque::new());
+        let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
         assert_eq!(vec![2, 3, 0, 6, 99], computer.tape);
     }
@@ -295,7 +350,7 @@ mod tests {
     #[test]
     fn example_program_3() {
         let program = vec![2, 4, 4, 5, 99, 0];
-        let mut computer = Computer::new(&program, VecDeque::new());
+        let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
         assert_eq!(vec![2, 4, 4, 5, 99, 9801], computer.tape);
     }
@@ -303,7 +358,7 @@ mod tests {
     #[test]
     fn example_program_4() {
         let program = vec![1, 1, 1, 4, 99, 5, 6, 0, 99];
-        let mut computer = Computer::new(&program, VecDeque::new());
+        let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
         assert_eq!(vec![30, 1, 1, 4, 2, 5, 6, 0, 99], computer.tape);
     }
@@ -311,7 +366,7 @@ mod tests {
     #[test]
     fn input_output() {
         let program = vec![3, 0, 4, 0, 99];
-        let mut computer = Computer::new(&program, queue![42]);
+        let mut computer = Computer::new(0, &program, queue![42], Vec::new());
         computer.run_program();
         assert_eq!(vec![42], computer.output);
     }
@@ -319,7 +374,7 @@ mod tests {
     #[test]
     fn parameter_modes() {
         let program = vec![1002, 4, 3, 4, 33];
-        let mut computer = Computer::new(&program, VecDeque::new());
+        let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
         assert_eq!(vec![1002, 4, 3, 4, 99], computer.tape);
     }
@@ -332,15 +387,15 @@ mod tests {
             20, 1105, 1, 46, 98, 99,
         ];
 
-        let mut computer = Computer::new(&program, queue![7]);
+        let mut computer = Computer::new(0, &program, queue![7], Vec::new());
         computer.run_program();
         assert_eq!(vec![999], computer.output);
 
-        let mut computer = Computer::new(&program, queue![8]);
+        let mut computer = Computer::new(0, &program, queue![8], Vec::new());
         computer.run_program();
         assert_eq!(vec![1000], computer.output);
 
-        let mut computer = Computer::new(&program, queue![9]);
+        let mut computer = Computer::new(0, &program, queue![9], Vec::new());
         computer.run_program();
         assert_eq!(vec![1001], computer.output);
     }
@@ -350,7 +405,7 @@ mod tests {
         let program = vec![
             3, 15, 3, 16, 1002, 16, 10, 16, 1, 16, 15, 15, 4, 15, 99, 0, 0,
         ];
-        let thruster_input = find_best_phase_settings(&program, 0);
+        let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS, false);
         assert_eq!(43210, thruster_input);
     }
 
@@ -360,7 +415,7 @@ mod tests {
             3, 23, 3, 24, 1002, 24, 10, 24, 1002, 23, -1, 23, 101, 5, 23, 23, 1, 24, 23, 23, 4, 23,
             99, 0, 0,
         ];
-        let thruster_input = find_best_phase_settings(&program, 0);
+        let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS, false);
         assert_eq!(54321, thruster_input);
     }
 
@@ -370,9 +425,9 @@ mod tests {
             3, 31, 3, 32, 1002, 32, 10, 32, 1001, 31, -2, 31, 1007, 31, 0, 33, 1002, 33, 7, 33, 1,
             33, 31, 31, 1, 32, 31, 31, 4, 31, 99, 0, 0, 0,
         ];
-        let thruster_input = find_best_phase_settings(&program, 0);
+        let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS, false);
         assert_eq!(65210, thruster_input);
-    }*/
+    }
 
     #[test]
     fn amplifier_feedback_example_1() {
@@ -380,7 +435,7 @@ mod tests {
             3, 26, 1001, 26, -4, 26, 3, 27, 1002, 27, 2, 27, 1, 27, 26, 27, 4, 27, 1001, 28, -1,
             28, 1005, 28, 6, 99, 0, 0, 5,
         ];
-        let thruster_input = find_best_phase_settings(&program, 0);
+        let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS_FEEDBACK, true);
         assert_eq!(139629729, thruster_input);
     }
 
@@ -391,8 +446,18 @@ mod tests {
             -5, 54, 1105, 1, 12, 1, 53, 54, 53, 1008, 54, 0, 55, 1001, 55, 1, 55, 2, 53, 55, 53, 4,
             53, 1001, 56, -1, 56, 1005, 56, 6, 99, 0, 0, 0, 0, 10,
         ];
-        let thruster_input = find_best_phase_settings(&program, 0);
+        let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS_FEEDBACK, true);
         assert_eq!(18216, thruster_input);
+    }
+
+    #[test]
+    fn part_1() {
+        let program: Vec<i32> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+        let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS, false);
+        assert_eq!(929800, thruster_input);
     }
 
     #[test]
@@ -401,7 +466,7 @@ mod tests {
             .split_char(',')
             .read_from_file("input.txt")
             .unwrap();
-        let thruster_input = find_best_phase_settings(&program, 0);
+        let thruster_input = find_best_phase_settings(&program, 0, PHASE_SETTINGS_FEEDBACK, true);
         assert_eq!(15432220, thruster_input);
     }
 }
