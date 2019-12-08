@@ -35,6 +35,20 @@ fn main() {
     }
 
     println!("1*2 on layer with smallest number of zeros: {}", result);
+
+    let stacked = image.stack_layers();
+    for (i, &pixel) in stacked.iter().enumerate() {
+        match pixel {
+            0 => print!("#"),
+            1 => print!(" "),
+            2 => print!("."),
+            p => panic!("Unexpected pixel: {}", p),
+        }
+
+        if i % WIDTH == WIDTH - 1 {
+            println!();
+        }
+    }
 }
 
 struct Image {
@@ -74,6 +88,23 @@ impl Image {
         }
 
         counts
+    }
+
+    fn stack_layers(&self) -> Vec<u32> {
+        let mut stacked = vec![2; WIDTH * HEIGHT];
+
+        for layer in &self.layers {
+            for (i, &digit) in layer.iter().enumerate() {
+                stacked[i] = match (digit, stacked[i]) {
+                    (_, 0) => 0,
+                    (_, 1) => 1,
+                    (d, 2) => d,
+                    (d, s) => panic!("Unexpected digits: new: {}, stacked: {}", d, s),
+                };
+            }
+        }
+
+        stacked
     }
 }
 
