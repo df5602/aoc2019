@@ -125,12 +125,29 @@ impl Graph {
     }
 }
 
-/*#[cfg(test)]
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn count_depth() {
+    fn part_1() {
+        let orbits: Vec<Orbit> = FileReader::new()
+            .split_lines()
+            .read_from_file("input.txt")
+            .unwrap();
+        let graph = Graph::construct_graph(&orbits);
+        let number_of_orbits = graph.count_orbits();
+        assert_eq!(621125, number_of_orbits);
+    }
 
-     }
-}*/
+    #[test]
+    fn part_2() {
+        let orbits: Vec<Orbit> = FileReader::new()
+            .split_lines()
+            .read_from_file("input.txt")
+            .unwrap();
+        let graph = Graph::construct_graph(&orbits);
+        let minimal_distance = graph.minimal_distance("YOU", "SAN");
+        assert_eq!(550, minimal_distance - 2);
+    }
+}
