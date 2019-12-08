@@ -22,66 +22,79 @@ fn main() {
         }
     };
 
-    let image = Image::new(&input);
-    let counts = image.count_digits();
+    let image = RawImage::new(&input, WIDTH, HEIGHT);
+    let counts = image.count_colors_in_layers();
 
-    let mut result = 0;
-    let mut min_zeros = usize::max_value();
-    for count in counts {
-        if count.0 < min_zeros {
-            result = count.1 * count.2;
-            min_zeros = count.0;
-        }
-    }
-
+    let result = product_of_layer_with_minimum_number_of_zeros(&counts);
     println!("1*2 on layer with smallest number of zeros: {}", result);
 
-    let stacked = image.stack_layers();
-    for (i, &pixel) in stacked.iter().enumerate() {
-        match pixel {
-            0 => print!("#"),
-            1 => print!(" "),
-            2 => print!("."),
-            p => panic!("Unexpected pixel: {}", p),
-        }
+    let stacked_image = image.stack_layers();
+    stacked_image.draw();
+}
 
-        if i % WIDTH == WIDTH - 1 {
-            println!();
+fn product_of_layer_with_minimum_number_of_zeros(counts: &[(usize, usize, usize)]) -> usize {
+    counts
+        .iter()
+        .map(|(zeros, ones, twos)| (zeros, ones * twos))
+        .min_by_key(|(&zeros, _)| zeros)
+        .map(|(_, product)| product)
+        .unwrap()
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum Color {
+    Black,
+    White,
+    Transparent,
+}
+
+impl From<char> for Color {
+    fn from(ch: char) -> Self {
+        match ch.to_digit(10).unwrap() {
+            0 => Color::Black,
+            1 => Color::White,
+            2 => Color::Transparent,
+            ch => panic!("Invalid character: {}", ch),
         }
     }
 }
 
-struct Image {
-    layers: Vec<Vec<u32>>,
+struct RawImage {
+    layers: Vec<Vec<Color>>,
+    width: usize,
+    height: usize,
 }
 
-impl Image {
-    fn new(data: &str) -> Self {
+impl RawImage {
+    fn new(data: &str, width: usize, height: usize) -> Self {
         let mut layers = Vec::new();
         let mut current_layer = Vec::new();
 
         for (i, ch) in data.char_indices() {
-            current_layer.push(ch.to_digit(10).unwrap());
-            if i % (WIDTH * HEIGHT) == WIDTH * HEIGHT - 1 {
+            current_layer.push(Color::from(ch));
+            if i % (width * height) == width * height - 1 {
                 layers.push(current_layer);
                 current_layer = Vec::new();
             }
         }
 
-        Self { layers: layers }
+        Self {
+            layers,
+            width,
+            height,
+        }
     }
 
-    fn count_digits(&self) -> Vec<(usize, usize, usize)> {
+    fn count_colors_in_layers(&self) -> Vec<(usize, usize, usize)> {
         let mut counts = Vec::new();
 
         for layer in &self.layers {
             let mut count = (0, 0, 0);
             for &digit in layer {
                 match digit {
-                    0 => count.0 += 1,
-                    1 => count.1 += 1,
-                    2 => count.2 += 1,
-                    d => panic!("Unexpected digit: {}", d),
+                    Color::Black => count.0 += 1,
+                    Color::White => count.1 += 1,
+                    Color::Transparent => count.2 += 1,
                 }
             }
             counts.push(count);
@@ -90,30 +103,217 @@ impl Image {
         counts
     }
 
-    fn stack_layers(&self) -> Vec<u32> {
-        let mut stacked = vec![2; WIDTH * HEIGHT];
+    fn stack_layers(&self) -> StackedImage {
+        let mut stacked = vec![Color::Transparent; self.width * self.height];
 
         for layer in &self.layers {
             for (i, &digit) in layer.iter().enumerate() {
                 stacked[i] = match (digit, stacked[i]) {
-                    (_, 0) => 0,
-                    (_, 1) => 1,
-                    (d, 2) => d,
-                    (d, s) => panic!("Unexpected digits: new: {}, stacked: {}", d, s),
+                    (_, Color::Black) => Color::Black,
+                    (_, Color::White) => Color::White,
+                    (d, Color::Transparent) => d,
                 };
             }
         }
 
-        stacked
+        StackedImage {
+            image: stacked,
+            width: self.width,
+        }
+    }
+}
+
+struct StackedImage {
+    image: Vec<Color>,
+    width: usize,
+}
+
+impl StackedImage {
+    fn draw(&self) {
+        for (i, &pixel) in self.image.iter().enumerate() {
+            match pixel {
+                Color::Black => print!("\u{2588}"),
+                Color::White => print!("\u{2591}"),
+                Color::Transparent => print!("."),
+            }
+            if i % self.width == self.width - 1 {
+                println!();
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
 
-    // #[test]
-    // fn it_works() {
-    //     assert!(1 < 2);
-    // }
+    #[test]
+    fn part_1() {
+        let input: String = FileReader::new().read_from_file("input.txt").unwrap();
+        let image = RawImage::new(&input, WIDTH, HEIGHT);
+        let counts = image.count_colors_in_layers();
+        let result = product_of_layer_with_minimum_number_of_zeros(&counts);
+        assert_eq!(1340, result);
+    }
+
+    #[test]
+    fn part_2() {
+        let correct_stacked_image = vec![
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::Black,
+            Color::Black,
+            Color::White,
+            Color::White,
+            Color::Black,
+            Color::Black,
+        ];
+
+        let input: String = FileReader::new().read_from_file("input.txt").unwrap();
+        let image = RawImage::new(&input, WIDTH, HEIGHT);
+        let stacked_image = image.stack_layers();
+        assert_eq!(correct_stacked_image, stacked_image.image);
+    }
 }
