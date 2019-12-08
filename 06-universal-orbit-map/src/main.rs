@@ -39,7 +39,7 @@ struct Orbit {
 #[derive(Debug)]
 struct Node {
     object: String,
-    parent: String,
+    parent: Option<String>,
     children: Vec<String>,
 }
 
@@ -57,15 +57,15 @@ impl Graph {
         for orbit in orbits {
             let node = graph.nodes.entry(orbit.object.clone()).or_insert(Node {
                 object: orbit.object.clone(),
-                parent: String::new(),
+                parent: None,
                 children: Vec::new(),
             });
-            assert!(node.parent.is_empty());
-            node.parent = orbit.center.clone();
+            assert!(node.parent.is_none());
+            node.parent = Some(orbit.center.clone());
 
             let parent = graph.nodes.entry(orbit.center.clone()).or_insert(Node {
                 object: orbit.center.clone(),
-                parent: String::new(),
+                parent: None,
                 children: Vec::new(),
             });
             parent.children.push(orbit.object.clone());
@@ -96,10 +96,11 @@ impl Graph {
         visited.insert(current.object.clone(), distance);
 
         loop {
-            if current.parent.is_empty() {
-                break;
-            }
-            current = self.nodes.get(&current.parent).unwrap();
+            let parent = match &current.parent {
+                Some(parent) => parent,
+                None => break,
+            };
+            current = self.nodes.get(parent).unwrap();
 
             distance += 1;
             visited.insert(current.object.clone(), distance);
@@ -115,10 +116,11 @@ impl Graph {
             }
 
             distance += 1;
-            current = self.nodes.get(&current.parent).unwrap();
-            if current.parent.is_empty() {
-                break;
-            }
+            let parent = match &current.parent {
+                Some(parent) => parent,
+                None => break,
+            };
+            current = self.nodes.get(parent).unwrap();
         }
 
         0
