@@ -9,4 +9,5 @@ members = [
     "05-sunny-with-a-chance-of-asteroids",
     "06-universal-orbit-map",
     "07-amplification-circuit",
+    "08-space-image-format",
 ]
