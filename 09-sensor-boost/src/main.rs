@@ -34,6 +34,10 @@ fn main() {
     let mut computer = Computer::new(0, &program, queue![1], Vec::new());
     computer.run_program();
     println!("{:?}", computer.output);
+
+    let mut computer = Computer::new(0, &program, queue![2], Vec::new());
+    computer.run_program();
+    println!("{:?}", computer.output);
 }
 
 trait Input<T> {
@@ -41,14 +45,6 @@ trait Input<T> {
     // Blocking read.
     fn read(&mut self) -> Result<T, Self::ReadError>;
 }
-
-/*impl<T> Input<T> for Receiver<T> {
-    type ReadError = std::sync::mpsc::RecvError;
-
-    fn read(&mut self) -> Result<T, Self::ReadError> {
-        self.recv()
-    }
-}*/
 
 impl<T> Input<T> for VecDeque<T> {
     type ReadError = String;
@@ -66,14 +62,6 @@ trait Output<T> {
     // Blocking write.
     fn write(&mut self, t: T) -> Result<(), Self::WriteError>;
 }
-
-/*impl<T> Output<T> for Sender<T> {
-    type WriteError = std::sync::mpsc::SendError<T>;
-
-    fn write(&mut self, t: T) -> Result<(), Self::WriteError> {
-        self.send(t)
-    }
-}*/
 
 impl<T> Output<T> for Vec<T> {
     type WriteError = ();
