@@ -83,7 +83,6 @@ const EQUALS: u32 = 8;
 const RELATIVE_BASE_OFFSET: u32 = 9;
 const HALT: u32 = 99;
 
-const MEMORY_SIZE: usize = 8192;
 type MemoryType = i64;
 
 #[derive(Debug, Copy, Clone)]
@@ -110,6 +109,8 @@ enum NextState {
     Terminate,
 }
 
+const MAX_MEMORY: usize = 1024 * 1024;
+
 struct Computer<I: Input<MemoryType>, O: Output<MemoryType>> {
     _id: usize,
     tape: Vec<MemoryType>,
@@ -125,16 +126,9 @@ where
     I::ReadError: std::fmt::Debug,
 {
     fn new(id: usize, program: &[MemoryType], input: I, output: O) -> Self {
-        let mut tape = program.to_vec();
-        if program.len() < MEMORY_SIZE {
-            for _ in 0..MEMORY_SIZE - program.len() {
-                tape.push(0);
-            }
-        }
-
         Self {
             _id: id,
-            tape: tape,
+            tape: program.to_vec(),
             input,
             output,
             last_output: 0,
@@ -156,27 +150,49 @@ where
         self.last_output
     }
 
+    fn load(&self, address: usize) -> MemoryType {
+        if address < self.tape.len() {
+            self.tape[address]
+        } else {
+            0
+        }
+    }
+
+    fn store(&mut self, address: usize, value: MemoryType) {
+        if address >= self.tape.len() {
+            if address < MAX_MEMORY {
+                self.tape.resize(address + 1, 0);
+            } else {
+                panic!(
+                    "Attempt to resize beyond memory limit [request: {}, limit: {}]",
+                    address, MAX_MEMORY
+                );
+            }
+        }
+        self.tape[address] = value;
+    }
+
     fn load_operand(&self, offset: usize, mode: ParameterMode) -> MemoryType {
         match mode {
-            ParameterMode::Position => self.tape[self.tape[offset] as usize],
-            ParameterMode::Immediate => self.tape[offset],
+            ParameterMode::Position => self.load(self.load(offset) as usize),
+            ParameterMode::Immediate => self.load(offset),
             ParameterMode::Relative => {
-                self.tape[(self.tape[offset] as MemoryType + self.relative_base) as usize]
+                self.load((self.load(offset) as MemoryType + self.relative_base) as usize)
             }
         }
     }
 
     fn store_operand(&mut self, offset: usize, mode: ParameterMode, value: MemoryType) {
         let output_pos = match mode {
-            ParameterMode::Position => self.tape[offset] as usize,
+            ParameterMode::Position => self.load(offset) as usize,
             ParameterMode::Relative => {
-                (self.tape[offset] as MemoryType + self.relative_base) as usize
+                (self.load(offset) as MemoryType + self.relative_base) as usize
             }
             ParameterMode::Immediate => {
                 panic!("Write to immediate not allowed!");
             }
         };
-        self.tape[output_pos] = value;
+        self.store(output_pos, value);
     }
 
     fn should_jump(condition: MemoryType, opcode: u32) -> bool {
@@ -198,7 +214,7 @@ where
     }
 
     fn execute_instruction(&mut self) -> NextState {
-        let instruction = self.tape[self.ip] as u32;
+        let instruction = self.load(self.ip) as u32;
         let opcode = instruction % 100;
         let mut modes = [ParameterMode::Position; 3];
         modes[0] = ParameterMode::from((instruction / 100) % 10);
@@ -244,7 +260,8 @@ where
             HALT => NextState::Terminate,
             _ => panic!(
                 "Invalid opcode ({}) at position {}!",
-                self.tape[self.ip], self.ip
+                self.load(self.ip),
+                self.ip
             ),
         }
     }
@@ -266,7 +283,7 @@ mod tests {
         let program = vec![1, 0, 0, 0, 99];
         let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
-        assert_eq!(&[2, 0, 0, 0, 99], &computer.tape[..program.len()]);
+        assert_eq!(vec![2, 0, 0, 0, 99], computer.tape);
     }
 
     #[test]
@@ -274,7 +291,7 @@ mod tests {
         let program = vec![2, 3, 0, 3, 99];
         let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
-        assert_eq!(&[2, 3, 0, 6, 99], &computer.tape[..program.len()]);
+        assert_eq!(vec![2, 3, 0, 6, 99], computer.tape);
     }
 
     #[test]
@@ -282,7 +299,7 @@ mod tests {
         let program = vec![2, 4, 4, 5, 99, 0];
         let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
-        assert_eq!(&[2, 4, 4, 5, 99, 9801], &computer.tape[..program.len()]);
+        assert_eq!(vec![2, 4, 4, 5, 99, 9801], computer.tape);
     }
 
     #[test]
@@ -290,10 +307,7 @@ mod tests {
         let program = vec![1, 1, 1, 4, 99, 5, 6, 0, 99];
         let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
-        assert_eq!(
-            &[30, 1, 1, 4, 2, 5, 6, 0, 99],
-            &computer.tape[..program.len()]
-        );
+        assert_eq!(vec![30, 1, 1, 4, 2, 5, 6, 0, 99], computer.tape);
     }
 
     #[test]
@@ -309,7 +323,7 @@ mod tests {
         let program = vec![1002, 4, 3, 4, 33];
         let mut computer = Computer::new(0, &program, VecDeque::new(), ());
         computer.run_program();
-        assert_eq!(&[1002, 4, 3, 4, 99], &computer.tape[..program.len()]);
+        assert_eq!(vec![1002, 4, 3, 4, 99], computer.tape);
     }
 
     #[test]
@@ -360,5 +374,29 @@ mod tests {
         let mut computer = Computer::new(0, &program, VecDeque::new(), Vec::new());
         computer.run_program();
         assert_eq!(vec![1125899906842624], computer.output);
+    }
+
+    #[test]
+    fn part_1() {
+        let program: Vec<MemoryType> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+
+        let mut computer = Computer::new(0, &program, queue![1], Vec::new());
+        computer.run_program();
+        assert_eq!(vec![3780860499], computer.output);
+    }
+
+    #[test]
+    fn part_2() {
+        let program: Vec<MemoryType> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+
+        let mut computer = Computer::new(0, &program, queue![2], Vec::new());
+        computer.run_program();
+        assert_eq!(vec![33343], computer.output);
     }
 }

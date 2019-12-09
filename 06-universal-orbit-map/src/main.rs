@@ -95,11 +95,7 @@ impl Graph {
         let mut current = self.nodes.get(from).unwrap();
         visited.insert(current.object.clone(), distance);
 
-        loop {
-            let parent = match &current.parent {
-                Some(parent) => parent,
-                None => break,
-            };
+        while let Some(parent) = &current.parent {
             current = self.nodes.get(parent).unwrap();
 
             distance += 1;
