@@ -10,4 +10,5 @@ members = [
     "06-universal-orbit-map",
     "07-amplification-circuit",
     "08-space-image-format",
+    "09-sensor-boost",
 ]
