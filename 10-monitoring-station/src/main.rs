@@ -52,8 +52,8 @@ impl Vector {
 
     fn minimize(&mut self) {
         let gcd = Self::greatest_common_divisor(self.dx, self.dy);
-        self.dx = self.dx / (gcd as isize);
-        self.dy = self.dy / (gcd as isize);
+        self.dx /= gcd as isize;
+        self.dy /= gcd as isize;
     }
 
     fn greatest_common_divisor(mut a: isize, mut b: isize) -> usize {
@@ -74,7 +74,7 @@ impl Vector {
             }
         }
 
-        return a.abs() as usize;
+        a.abs() as usize
     }
 }
 
@@ -87,7 +87,7 @@ struct AsteroidMap {
 
 impl AsteroidMap {
     fn new(input: &[String]) -> Self {
-        assert!(input.len() > 0);
+        assert!(!input.is_empty());
 
         let width = input[0].len();
         let height = input.len();
@@ -116,6 +116,7 @@ impl AsteroidMap {
         }
     }
 
+    #[allow(clippy::many_single_char_names)]
     fn line_of_sight(&self, a: Point, b: Point) -> bool {
         let mut v = Vector::from_points(a, b);
         if v.dx == 0 && v.dy == 0 {
@@ -148,7 +149,7 @@ impl AsteroidMap {
             }
         }
 
-        return true;
+        true
     }
 
     fn find_best_monitoring_location(&self) -> usize {
@@ -159,7 +160,6 @@ impl AsteroidMap {
             for other in &self.asteroids {
                 if self.line_of_sight(*location, *other) {
                     count += 1;
-                } else {
                 }
             }
             numbers.push((*location, count));
