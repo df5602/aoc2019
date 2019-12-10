@@ -11,4 +11,5 @@ members = [
     "07-amplification-circuit",
     "08-space-image-format",
     "09-sensor-boost",
+    "10-monitoring-station",
 ]
