@@ -21,7 +21,10 @@ fn main() {
 
     let map = AsteroidMap::new(&input);
     let most_asteroids_detected = map.find_best_monitoring_location();
-    println!("Most asteroids detected: {}", most_asteroids_detected);
+    println!(
+        "Best location at position ({},{}). Asteroids detected: {}",
+        most_asteroids_detected.0.x, most_asteroids_detected.0.y, most_asteroids_detected.1
+    );
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -75,6 +78,29 @@ impl Vector {
         }
 
         a.abs() as usize
+    }
+
+    fn calculate_angle(&self) -> f64 {
+        use std::f64::consts::PI;
+
+        if self.dx >= 0 && self.dy < 0 {
+            f64::atan(self.dx as f64 / -self.dy as f64)
+        } else if self.dx > 0 && self.dy == 0 {
+            PI / 2.0
+        } else if self.dx >= 0 && self.dy > 0 {
+            PI - f64::atan(self.dx as f64 / self.dy as f64)
+        } else if self.dx < 0 && self.dy > 0 {
+            PI + f64::atan(-self.dx as f64 / self.dy as f64)
+        } else if self.dx < 0 && self.dy == 0 {
+            3.0 * PI / 2.0
+        } else if self.dx < 0 && self.dy < 0 {
+            2.0 * PI - f64::atan(self.dx as f64 / self.dy as f64)
+        } else {
+            panic!(
+                "Cannot calculate angle of vector of length zero [dx: {}, dy: {}]",
+                self.dx, self.dy
+            );
+        }
     }
 }
 
@@ -152,7 +178,7 @@ impl AsteroidMap {
         true
     }
 
-    fn find_best_monitoring_location(&self) -> usize {
+    fn find_best_monitoring_location(&self) -> (Point, usize) {
         let mut numbers = Vec::with_capacity(self.asteroids.len());
 
         for location in &self.asteroids {
@@ -165,11 +191,7 @@ impl AsteroidMap {
             numbers.push((*location, count));
         }
 
-        numbers
-            .iter()
-            .max_by_key(|(_, count)| count)
-            .map(|(_, count)| *count)
-            .unwrap()
+        *numbers.iter().max_by_key(|(_, count)| count).unwrap()
     }
 }
 
@@ -193,6 +215,35 @@ mod tests {
     }
 
     #[test]
+    fn trigonometry() {
+        use std::f64::consts::PI;
+
+        let up = Vector { dx: 0, dy: -3 };
+        assert_eq!(0.0, up.calculate_angle());
+
+        let q1 = Vector { dx: 3, dy: -3 };
+        assert_eq!(PI / 4.0, q1.calculate_angle());
+
+        let right = Vector { dx: 3, dy: 0 };
+        assert_eq!(PI / 2.0, right.calculate_angle());
+
+        let q2 = Vector { dx: 3, dy: 3 };
+        assert_eq!(3.0 * PI / 4.0, q2.calculate_angle());
+
+        let down = Vector { dx: 0, dy: 3 };
+        assert_eq!(PI, down.calculate_angle());
+
+        let q3 = Vector { dx: -3, dy: 3 };
+        assert_eq!(5.0 * PI / 4.0, q3.calculate_angle());
+
+        let left = Vector { dx: -3, dy: 0 };
+        assert_eq!(3.0 * PI / 2.0, left.calculate_angle());
+
+        let q4 = Vector { dx: -3, dy: -3 };
+        assert_eq!(7.0 * PI / 4.0, q4.calculate_angle());
+    }
+
+    #[test]
     fn example_1() {
         let input = vec![
             String::from(".#..#"),
@@ -203,6 +254,6 @@ mod tests {
         ];
         let map = AsteroidMap::new(&input);
         let most_asteroids_detected = map.find_best_monitoring_location();
-        assert_eq!(8, most_asteroids_detected);
+        assert_eq!((Point::new(3, 4), 8), most_asteroids_detected);
     }
 }
