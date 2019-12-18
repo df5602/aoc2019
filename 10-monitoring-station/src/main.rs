@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::env;
 
 use aoc_util::input::{FileReader, FromFile};
@@ -19,11 +20,17 @@ fn main() {
         }
     };
 
-    let map = AsteroidMap::new(&input);
+    let mut map = AsteroidMap::new(&input);
     let most_asteroids_detected = map.find_best_monitoring_location();
     println!(
         "Best location at position ({},{}). Asteroids detected: {}",
         most_asteroids_detected.0.x, most_asteroids_detected.0.y, most_asteroids_detected.1
+    );
+
+    let twohundredth = map.find_nth_vaporized_asteroid(most_asteroids_detected.0, 200);
+    println!(
+        "200th asteroid to be vaporized: ({},{})",
+        twohundredth.x, twohundredth.y
     );
 }
 
@@ -193,6 +200,63 @@ impl AsteroidMap {
 
         *numbers.iter().max_by_key(|(_, count)| count).unwrap()
     }
+
+    fn find_nth_vaporized_asteroid(&mut self, laser_location: Point, n: usize) -> Point {
+        // Delete position of laser from map, given that we don't want to vaporize ourselves...
+        let idx_laser_location = self
+            .asteroids
+            .iter()
+            .position(|&asteroid| asteroid == laser_location)
+            .unwrap();
+        self.asteroids.remove(idx_laser_location);
+        self.grid[laser_location.y * self.width + laser_location.x] = 0;
+
+        // Sort asteroid list by angles
+        let mut asteroids: VecDeque<(Point, f64)> = self
+            .asteroids
+            .iter()
+            .map(|&asteroid| {
+                (
+                    asteroid,
+                    Vector::from_points(laser_location, asteroid).calculate_angle(),
+                )
+            })
+            .collect();
+
+        asteroids
+            .as_mut_slices()
+            .0
+            .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        // Start vaporizing
+        let mut vaporization_count = 0;
+        let mut count_since_last_vaporization = 0;
+        let mut previous_angle = -10.0;
+
+        let mut nth = Point { x: 0, y: 0 };
+
+        while let Some((asteroid, angle)) = asteroids.pop_front() {
+            if self.line_of_sight(laser_location, asteroid)
+                && ((angle - previous_angle).abs() > std::f64::EPSILON
+                    || count_since_last_vaporization == asteroids.len())
+            {
+                vaporization_count += 1;
+                count_since_last_vaporization = 0;
+                previous_angle = angle;
+                self.grid[asteroid.y * self.width + asteroid.x] = 0;
+
+                if vaporization_count == n {
+                    nth = asteroid;
+                    break;
+                }
+            } else {
+                count_since_last_vaporization += 1;
+                asteroids.push_back((asteroid, angle));
+            }
+        }
+
+        nth
+    }
 }
 
 #[cfg(test)]
@@ -255,5 +319,28 @@ mod tests {
         let map = AsteroidMap::new(&input);
         let most_asteroids_detected = map.find_best_monitoring_location();
         assert_eq!((Point::new(3, 4), 8), most_asteroids_detected);
+    }
+
+    #[test]
+    fn part_1() {
+        let input: Vec<String> = FileReader::new()
+            .split_lines()
+            .read_from_file("input.txt")
+            .unwrap();
+        let map = AsteroidMap::new(&input);
+        let most_asteroids_detected = map.find_best_monitoring_location();
+        assert_eq!(247, most_asteroids_detected.1);
+    }
+
+    #[test]
+    fn part_2() {
+        let input: Vec<String> = FileReader::new()
+            .split_lines()
+            .read_from_file("input.txt")
+            .unwrap();
+        let mut map = AsteroidMap::new(&input);
+        let most_asteroids_detected = map.find_best_monitoring_location();
+        let twohundredth = map.find_nth_vaporized_asteroid(most_asteroids_detected.0, 200);
+        assert_eq!(Point { x: 19, y: 19 }, twohundredth);
     }
 }
