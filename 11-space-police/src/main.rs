@@ -1,19 +1,8 @@
 use std::collections::{HashMap, VecDeque};
 use std::env;
-use std::io::BufRead;
 use std::{thread, time};
 
 use aoc_util::input::{FileReader, FromFile};
-
-macro_rules! queue {
-    ($($x:expr),*) => {
-        {
-            let mut q = VecDeque::new();
-            $(q.push_back($x);)*
-            q
-        }
-    };
-}
 
 const DELAY: std::time::Duration = time::Duration::from_millis(16);
 
@@ -35,9 +24,14 @@ fn main() {
     };
 
     let mut robot = HullPaintingRobot::new(&input);
-    robot.paint();
+    robot.paint(0, false);
     let number_of_panels_painted = robot.number_of_panels_painted();
     println!("Number of panels painted: {}", number_of_panels_painted);
+
+    let mut robot = HullPaintingRobot::new(&input);
+    robot.paint(1, false);
+    println!("Registration:");
+    robot.visualize();
 }
 
 enum Direction {
@@ -92,9 +86,8 @@ impl HullPaintingRobot {
         }
     }
 
-    fn paint(&mut self) {
-        // Hull at starting position is black
-        self.computer.input.push_back(0);
+    fn paint(&mut self, starting_panel: u32, visualize: bool) {
+        self.computer.input.push_back(starting_panel as i64);
         let mut state = self.computer.run_program();
 
         loop {
@@ -138,11 +131,11 @@ impl HullPaintingRobot {
                         None => self.computer.input.push_back(0),
                     }
 
-                    println!("\n***************************************\n");
-                    self.visualize();
-                    //let mut input_buffer = String::new();
-                    //let _ = std::io::stdin().lock().read_line(&mut input_buffer);
-                    thread::sleep(DELAY);
+                    if visualize {
+                        println!("\n***************************************\n");
+                        self.visualize();
+                        thread::sleep(DELAY);
+                    }
                     state = self.computer.resume();
                 }
                 RunState::Stopped(_) => {
@@ -170,11 +163,11 @@ impl HullPaintingRobot {
                 } else {
                     match self.grid.get(&(x, y)) {
                         Some(color) => match color {
-                            0 => print!("."),
+                            0 => print!(" "),
                             1 => print!("#"),
                             _ => panic!("Invalid color: {}", color),
                         },
-                        None => print!("."),
+                        None => print!(" "),
                     }
                 }
             }
@@ -453,6 +446,16 @@ where
 
 #[cfg(test)]
 mod tests {
+    macro_rules! queue {
+        ($($x:expr),*) => {
+            {
+                let mut q = VecDeque::new();
+                $(q.push_back($x);)*
+                q
+            }
+        };
+    }
+
     use super::*;
 
     impl<T> Output<T> for () {
@@ -558,5 +561,17 @@ mod tests {
         let mut computer = Computer::new(0, &program, VecDeque::new(), Vec::new());
         computer.run_program();
         assert_eq!(vec![1125899906842624], computer.output);
+    }
+
+    #[test]
+    fn part_1() {
+        let input: Vec<i64> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+        let mut robot = HullPaintingRobot::new(&input);
+        robot.paint(0, false);
+        let number_of_panels_painted = robot.number_of_panels_painted();
+        assert_eq!(1883, number_of_panels_painted);
     }
 }
