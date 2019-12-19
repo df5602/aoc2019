@@ -12,4 +12,5 @@ members = [
     "08-space-image-format",
     "09-sensor-boost",
     "10-monitoring-station",
+    "11-space-police",
 ]
