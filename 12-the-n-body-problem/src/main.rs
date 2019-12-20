@@ -24,6 +24,11 @@ fn main() {
     simulator.simulate(1000);
     let total_energy = simulator.calculate_total_energy();
     println!("Total energy in system: {}", total_energy);
+
+    // Create new simulator to reset state
+    let mut simulator = OrbitSimulator::new(&moons);
+    let period = simulator.find_periodicity();
+    println!("Period: {}", period);
 }
 
 #[derive(Copy, Clone, Debug, FromStr)]
@@ -93,6 +98,83 @@ impl OrbitSimulator {
             })
             .sum()
     }
+
+    fn find_periodicity(&mut self) -> u64 {
+        // Key insights (thanks reddit...):
+        // - The position/velocity update for one dimension only depends
+        //   on position/velocity values of that dimension => the period in each dimension can be calculated
+        //   independently, and the period of the whole system must be the least common multiple of all periods.
+        // - The mapping from previous state to current state is invertible, meaning we could simulate backwards.
+        //   => The cycle must include the initial state
+
+        let initial_state = self.moons.clone();
+        let mut periods = (0, 0, 0);
+        for step in 1u64.. {
+            // Simulate one step
+            self.simulate_step();
+
+            // Check for cycle
+            let mut cycle = (true, true, true);
+            for (i, moon) in self.moons.iter().enumerate() {
+                if moon.dx != 0 || moon.x != initial_state[i].x {
+                    cycle.0 = false;
+                }
+
+                if moon.dy != 0 || moon.y != initial_state[i].y {
+                    cycle.1 = false;
+                }
+
+                if moon.dz != 0 || moon.z != initial_state[i].z {
+                    cycle.2 = false;
+                }
+            }
+
+            if cycle.0 && periods.0 == 0 {
+                periods.0 = step;
+            }
+
+            if cycle.1 && periods.1 == 0 {
+                periods.1 = step;
+            }
+
+            if cycle.2 && periods.2 == 0 {
+                periods.2 = step;
+            }
+
+            // Stop if all periods have been found
+            if periods.0 != 0 && periods.1 != 0 && periods.2 != 0 {
+                break;
+            }
+        }
+
+        let lcm = Self::least_common_multiple(periods.0, periods.1);
+        Self::least_common_multiple(lcm, periods.2)
+    }
+
+    fn least_common_multiple(a: u64, b: u64) -> u64 {
+        (a * b) / Self::greatest_common_divisor(a, b)
+    }
+
+    fn greatest_common_divisor(mut a: u64, mut b: u64) -> u64 {
+        if a == 0 {
+            return b;
+        }
+        if b == 0 {
+            return a;
+        }
+
+        loop {
+            let h = a % b;
+            a = b;
+            b = h;
+
+            if b == 0 {
+                break;
+            }
+        }
+
+        a
+    }
 }
 
 #[cfg(test)]
@@ -100,7 +182,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn example_1() {
+    fn energy_example_1() {
         let moons: Vec<Moon> = FileReader::new()
             .split_lines()
             .read_from_file("example1.txt")
@@ -112,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn example_2() {
+    fn energy_example_2() {
         let moons: Vec<Moon> = FileReader::new()
             .split_lines()
             .read_from_file("example2.txt")
@@ -121,6 +203,17 @@ mod tests {
         simulator.simulate(100);
         let total_energy = simulator.calculate_total_energy();
         assert_eq!(1940, total_energy);
+    }
+
+    #[test]
+    fn period_example_1() {
+        let moons: Vec<Moon> = FileReader::new()
+            .split_lines()
+            .read_from_file("example1.txt")
+            .unwrap();
+        let mut simulator = OrbitSimulator::new(&moons);
+        let period = simulator.find_periodicity();
+        assert_eq!(2772, period);
     }
 
     #[test]
@@ -133,5 +226,16 @@ mod tests {
         simulator.simulate(1000);
         let total_energy = simulator.calculate_total_energy();
         assert_eq!(12466, total_energy);
+    }
+
+    #[test]
+    fn part_2() {
+        let moons: Vec<Moon> = FileReader::new()
+            .split_lines()
+            .read_from_file("input.txt")
+            .unwrap();
+        let mut simulator = OrbitSimulator::new(&moons);
+        let period = simulator.find_periodicity();
+        assert_eq!(360689156787864, period);
     }
 }
