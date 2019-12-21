@@ -2,6 +2,7 @@
 
 members = [
     "template",
+    "intcode",
     "01-tyranny-of-the-rocket-equation",
     "02-1202-program-alarm",
     "03-crossed-wires",
@@ -14,4 +15,5 @@ members = [
     "10-monitoring-station",
     "11-space-police",
     "12-the-n-body-problem",
+    "13-care-package",
 ]

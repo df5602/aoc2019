@@ -93,6 +93,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "13-care-package"
+version = "0.1.0"
+dependencies = [
+ "aoc-util 0.1.0 (git+https://github.com/df5602/aoc-util)",
+ "intcode 0.1.0",
+]
+
+[[package]]
 name = "adhoc_derive"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -187,6 +195,10 @@ dependencies = [
  "cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
+
+[[package]]
+name = "intcode"
+version = "0.1.0"
 
 [[package]]
 name = "lazy_static"
