@@ -1,8 +1,12 @@
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::env;
+use std::{thread, time};
 
 use aoc_util::input::{FileReader, FromFile};
 use intcode::{Computer, RunState};
+
+const DELAY: std::time::Duration = time::Duration::from_millis(20);
 
 const WIDTH: usize = 43;
 const HEIGHT: usize = 21;
@@ -16,7 +20,7 @@ fn main() {
         }
     };
 
-    let game: Vec<i64> = match FileReader::new().split_char(',').read_from_file(input_file) {
+    let mut game: Vec<i64> = match FileReader::new().split_char(',').read_from_file(input_file) {
         Ok(input) => input,
         Err(e) => {
             println!("Error reading input: {}", e);
@@ -25,9 +29,13 @@ fn main() {
     };
 
     let mut arcade = ArcadeCabinet::new(&game);
-    arcade.play();
-
+    arcade.play(false);
     println!("Number of blocks: {}", arcade.block_count);
+
+    game[0] = 2; // Insert two quarters
+    let mut arcade = ArcadeCabinet::new(&game);
+    arcade.play(false);
+    println!("Final score: {}", arcade.score);
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -57,7 +65,10 @@ struct ArcadeCabinet {
     screen_width: usize,
     screen_height: usize,
     screen: Vec<TileType>,
+    ball_position: (usize, usize),
+    paddle_position: (usize, usize),
     block_count: usize,
+    score: usize,
 }
 
 impl ArcadeCabinet {
@@ -67,25 +78,44 @@ impl ArcadeCabinet {
             screen_width: WIDTH,
             screen_height: HEIGHT,
             screen: vec![TileType::Empty; WIDTH * HEIGHT],
+            ball_position: (0, 0),
+            paddle_position: (0, 0),
             block_count: 0,
+            score: 0,
         }
     }
 
-    fn play(&mut self) {
+    fn play(&mut self, visualize: bool) {
         let mut run_state = self.game.run_program();
         loop {
             match run_state {
                 RunState::NotYetStarted => unreachable!(),
                 RunState::NeedInput => {
-                    println!("NEED INPUT");
+                    // Update state
                     self.update_state();
-                    self.draw_screen();
-                    break;
+
+                    // Decide on input
+                    let input = match self.ball_position.0.cmp(&self.paddle_position.0) {
+                        Ordering::Greater => 1,
+                        Ordering::Less => -1,
+                        Ordering::Equal => 0,
+                    };
+
+                    self.game.get_input().push_back(input);
+
+                    // Draw screen
+                    if visualize {
+                        self.draw_screen();
+                        println!();
+                        thread::sleep(DELAY);
+                    }
                 }
                 RunState::Stopped(_) => {
-                    println!("STOPPED");
                     self.update_state();
-                    self.draw_screen();
+                    if visualize {
+                        self.draw_screen();
+                        println!("STOPPED");
+                    }
                     break;
                 }
             }
@@ -99,22 +129,44 @@ impl ArcadeCabinet {
         let output = self.game.get_output();
         self.block_count = 0;
         for pixel in output.chunks_exact(3) {
+            // Update score
+            if pixel[0] == -1 && pixel[1] == 0 {
+                self.score = pixel[2] as usize;
+                continue;
+            }
+
+            // Count blocks
             if pixel[2] == 2 {
                 self.block_count += 1;
             }
+
+            // Update paddle position
+            if pixel[2] == 3 {
+                self.paddle_position = (pixel[0] as usize, pixel[1] as usize);
+            }
+
+            // Update ball position
+            if pixel[2] == 4 {
+                self.ball_position = (pixel[0] as usize, pixel[1] as usize);
+            }
+
+            // Update tiles
             self.screen[pixel[1] as usize * self.screen_width + pixel[0] as usize] =
                 TileType::from(pixel[2]);
         }
     }
 
     fn draw_screen(&self) {
+        println!("+{:->42}", "+");
+        println!("|SCORE:{:>35}|", self.score);
+        println!("+{:->42}", "+");
         for y in 0..self.screen_height {
             for x in 0..self.screen_width {
                 match self.screen[y * self.screen_width + x] {
                     TileType::Empty => print!(" "),
                     TileType::Wall => print!("#"),
                     TileType::Block => print!("="),
-                    TileType::Paddle => print!("_"),
+                    TileType::Paddle => print!("-"),
                     TileType::Ball => print!("o"),
                 }
             }
@@ -134,7 +186,19 @@ mod tests {
             .read_from_file("input.txt")
             .unwrap();
         let mut arcade = ArcadeCabinet::new(&game);
-        arcade.play();
+        arcade.play(false);
         assert_eq!(284, arcade.block_count);
+    }
+
+    #[test]
+    fn part_2() {
+        let mut game: Vec<i64> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+        game[0] = 2; // Insert two quarters
+        let mut arcade = ArcadeCabinet::new(&game);
+        arcade.play(false);
+        assert_eq!(13581, arcade.score);
     }
 }
