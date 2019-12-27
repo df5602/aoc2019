@@ -16,4 +16,5 @@ members = [
     "11-space-police",
     "12-the-n-body-problem",
     "13-care-package",
+    "14-space-stoichiometry",
 ]
