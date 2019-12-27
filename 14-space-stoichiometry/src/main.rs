@@ -71,7 +71,7 @@ fn calculate_max_fuel(reactions: &HashMap<String, Reaction>, ore_quantity: u64) 
 }
 
 fn calculate_ore_requirements(reactions: &HashMap<String, Reaction>, fuel_quantity: u64) -> u64 {
-    let mut inventory: HashMap<String, u64> = HashMap::new();
+    let mut inventory = Inventory::new();
 
     let mut queue = VecDeque::new();
     queue.push_back(Material {
@@ -92,17 +92,7 @@ fn calculate_ore_requirements(reactions: &HashMap<String, Reaction>, fuel_quanti
             .expect("Required reaction not present!");
 
         let mut required_quantity = material.quantity;
-        let surplus = inventory.get_mut(&material.name);
-
-        if let Some(surplus) = surplus {
-            if required_quantity >= *surplus {
-                required_quantity -= *surplus;
-                *surplus = 0;
-            } else {
-                *surplus -= required_quantity;
-                required_quantity = 0;
-            }
-        }
+        required_quantity -= inventory.consume(&material.name, required_quantity);
 
         let multiplier = required_quantity / reaction.product.quantity
             + if required_quantity % reaction.product.quantity != 0 {
@@ -113,22 +103,12 @@ fn calculate_ore_requirements(reactions: &HashMap<String, Reaction>, fuel_quanti
 
         let surplus = reaction.product.quantity * multiplier - required_quantity;
         if surplus > 0 {
-            *inventory.entry(material.name.clone()).or_insert(0) += surplus;
+            inventory.add(&material.name, surplus);
         }
 
         for ingredient in &reaction.requirements {
             let mut required_quantity = ingredient.quantity * multiplier;
-            let surplus = inventory.get_mut(&ingredient.name);
-
-            if let Some(surplus) = surplus {
-                if required_quantity >= *surplus {
-                    required_quantity -= *surplus;
-                    *surplus = 0;
-                } else {
-                    *surplus -= required_quantity;
-                    required_quantity = 0;
-                }
-            }
+            required_quantity -= inventory.consume(&ingredient.name, required_quantity);
 
             if required_quantity > 0 {
                 queue.push_back(Material {
@@ -140,6 +120,40 @@ fn calculate_ore_requirements(reactions: &HashMap<String, Reaction>, fuel_quanti
     }
 
     amount_of_ore
+}
+
+struct Inventory {
+    inventory: HashMap<String, u64>,
+}
+
+impl Inventory {
+    fn new() -> Self {
+        Self {
+            inventory: HashMap::new(),
+        }
+    }
+
+    // Returns quantity that was consumed.
+    fn consume(&mut self, material: &str, mut quantity: u64) -> u64 {
+        let surplus = self.inventory.get_mut(material);
+
+        if let Some(surplus) = surplus {
+            if quantity >= *surplus {
+                quantity = *surplus;
+                *surplus = 0;
+            } else {
+                *surplus -= quantity;
+            }
+        } else {
+            quantity = 0;
+        }
+
+        quantity
+    }
+
+    fn add(&mut self, material: &str, quantity: u64) {
+        *self.inventory.entry(String::from(material)).or_insert(0) += quantity;
+    }
 }
 
 #[derive(Debug, FromStr)]
