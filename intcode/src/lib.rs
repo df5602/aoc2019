@@ -24,6 +24,21 @@ impl<T> Input<T> for VecDeque<T> {
     }
 }
 
+impl<T> Input<T> for Option<T> {
+    type ReadError = String;
+
+    fn read(&mut self) -> Result<T, Self::ReadError> {
+        match self.take() {
+            Some(t) => Ok(t),
+            None => Err(String::from("No input available.")),
+        }
+    }
+
+    fn try_read(&mut self) -> Option<T> {
+        self.take()
+    }
+}
+
 pub trait Output<T> {
     type WriteError;
     // Blocking write.
@@ -44,6 +59,15 @@ impl<T> Output<T> for VecDeque<T> {
 
     fn write(&mut self, t: T) -> Result<(), Self::WriteError> {
         self.push_back(t);
+        Ok(())
+    }
+}
+
+impl<T> Output<T> for Option<T> {
+    type WriteError = ();
+
+    fn write(&mut self, t: T) -> Result<(), Self::WriteError> {
+        *self = Some(t);
         Ok(())
     }
 }
