@@ -1,4 +1,4 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::env;
 use std::ops::Add;
 use std::{thread, time};
@@ -31,7 +31,7 @@ fn main() {
 
 struct RepairDroid {
     terrain: Terrain,
-    computer: Computer<VecDeque<i64>, VecDeque<i64>>,
+    computer: Computer<Option<i64>, Option<i64>>,
     visualize: bool,
 }
 
@@ -39,7 +39,7 @@ impl RepairDroid {
     fn new(program: &[i64], visualize: bool) -> Self {
         Self {
             terrain: Terrain::new(),
-            computer: Computer::new(0, program, VecDeque::new(), VecDeque::new()),
+            computer: Computer::new(0, program, None, None),
             visualize,
         }
     }
@@ -76,7 +76,7 @@ impl RepairDroid {
         }
 
         // Command direction to explore
-        self.computer.get_input().push_back(direction.into());
+        *self.computer.get_input() = Some(direction.into());
 
         // Explore direction
         let run_state = self.computer.resume();
@@ -89,7 +89,7 @@ impl RepairDroid {
         let status = self
             .computer
             .get_output()
-            .pop_front()
+            .take()
             .expect("Expected status report!");
         match status {
             0 => {
@@ -125,9 +125,7 @@ impl RepairDroid {
             if self.visualize {
                 println!("Backtracking...");
             }
-            self.computer
-                .get_input()
-                .push_back(direction.reverse().into());
+            *self.computer.get_input() = Some(direction.reverse().into());
 
             let run_state = self.computer.resume();
             if run_state != RunState::NeedInput {
@@ -135,7 +133,7 @@ impl RepairDroid {
             }
 
             // Consume status
-            self.computer.get_output().pop_front();
+            self.computer.get_output().take();
         }
 
         if self.visualize {
