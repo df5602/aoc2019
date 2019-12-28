@@ -79,7 +79,7 @@ impl From<u32> for ParameterMode {
     }
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum RunState {
     NotYetStarted,
     NeedInput,
