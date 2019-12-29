@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::env;
 use std::ops::Add;
 use std::{thread, time};
@@ -27,6 +27,18 @@ fn main() {
 
     let mut repair_droid = RepairDroid::new(&program, false);
     repair_droid.map_terrain();
+    repair_droid
+        .terrain
+        .calculate_distances_from_oxygen_system();
+
+    let distance_to_oxygen_system = repair_droid.terrain.distance(Position { x: 0, y: 0 });
+    println!(
+        "Distance between starting position and oxygen system: {}",
+        distance_to_oxygen_system
+    );
+
+    let max_distance = repair_droid.terrain.max_distance();
+    println!("Time to fill area with oxygen: {} minutes", max_distance);
 }
 
 struct RepairDroid {
@@ -52,17 +64,17 @@ impl RepairDroid {
 
         let starting_position = Position { x: 0, y: 0 };
         self.terrain.set_at(starting_position, Tile::Floor);
-        self.explore(starting_position, 0);
+        self.explore(starting_position);
     }
 
-    fn explore(&mut self, droid_position: Position, level: usize) {
-        self.explore_direction(Direction::North, droid_position, level + 1);
-        self.explore_direction(Direction::South, droid_position, level + 1);
-        self.explore_direction(Direction::West, droid_position, level + 1);
-        self.explore_direction(Direction::East, droid_position, level + 1);
+    fn explore(&mut self, droid_position: Position) {
+        self.explore_direction(Direction::North, droid_position);
+        self.explore_direction(Direction::South, droid_position);
+        self.explore_direction(Direction::West, droid_position);
+        self.explore_direction(Direction::East, droid_position);
     }
 
-    fn explore_direction(&mut self, direction: Direction, droid_position: Position, level: usize) {
+    fn explore_direction(&mut self, direction: Direction, droid_position: Position) {
         // Check that we haven't mapped that direction already
         if self.terrain.at(droid_position + direction).is_some() {
             return;
@@ -70,8 +82,8 @@ impl RepairDroid {
 
         if self.visualize {
             println!(
-                "[{}] Exploring direction {:?} from position ({}, {})",
-                level, direction, droid_position.x, droid_position.y
+                "Exploring direction {:?} from position ({}, {})",
+                direction, droid_position.x, droid_position.y
             );
         }
 
@@ -100,10 +112,7 @@ impl RepairDroid {
             2 => {
                 self.terrain
                     .set_at(droid_position + direction, Tile::OxygenSystem);
-                println!(
-                    "Found the oxygen system {} steps from the starting position.",
-                    level
-                );
+                self.terrain.oxygen_system = Some(droid_position + direction);
             }
             _ => panic!("Unexpected status: {}", status),
         }
@@ -120,7 +129,7 @@ impl RepairDroid {
                 thread::sleep(DELAY);
             }
 
-            self.explore(droid_position + direction, level);
+            self.explore(droid_position + direction);
 
             if self.visualize {
                 println!("Backtracking...");
@@ -222,6 +231,8 @@ struct Terrain {
     max_y: isize,
     min_y: isize,
     tiles: HashMap<Position, Tile>,
+    oxygen_system: Option<Position>,
+    distances: Vec<usize>,
 }
 
 impl Terrain {
@@ -232,6 +243,8 @@ impl Terrain {
             max_y: 0,
             min_y: 0,
             tiles: HashMap::new(),
+            oxygen_system: None,
+            distances: Vec::new(),
         }
     }
 
@@ -248,6 +261,69 @@ impl Terrain {
         self.max_y = isize::max(self.max_y, pos.y);
         self.min_y = isize::min(self.min_y, pos.y);
         self.tiles.insert(pos, t);
+    }
+
+    fn calculate_distances_from_oxygen_system(&mut self) {
+        let mut queue: VecDeque<(Position, usize)> = VecDeque::new();
+
+        // Initialize distances
+        self.distances.resize(
+            ((self.max_x - self.min_x + 1) * (self.max_y - self.min_y + 1)) as usize,
+            usize::max_value(),
+        );
+
+        // BFS
+        queue.push_back((
+            self.oxygen_system
+                .expect("Location of oxygen system unknown."),
+            0,
+        ));
+
+        while let Some((position, distance)) = queue.pop_front() {
+            self.add_neighbor_to_queue(&mut queue, position, Direction::North, distance + 1);
+            self.add_neighbor_to_queue(&mut queue, position, Direction::South, distance + 1);
+            self.add_neighbor_to_queue(&mut queue, position, Direction::West, distance + 1);
+            self.add_neighbor_to_queue(&mut queue, position, Direction::East, distance + 1);
+        }
+    }
+
+    fn distance(&self, position: Position) -> usize {
+        self.distances[self.index(position)]
+    }
+
+    fn max_distance(&self) -> usize {
+        if self.distances.is_empty() {
+            0
+        } else {
+            *self
+                .distances
+                .iter()
+                .filter(|&distance| *distance < usize::max_value())
+                .max()
+                .unwrap()
+        }
+    }
+
+    fn add_neighbor_to_queue(
+        &mut self,
+        queue: &mut VecDeque<(Position, usize)>,
+        position: Position,
+        direction: Direction,
+        distance: usize,
+    ) {
+        let neighbor = self.at(position + direction);
+        if let Some(Tile::Floor) = neighbor {
+            let index = self.index(position + direction);
+            if self.distances[index] == usize::max_value() {
+                queue.push_back((position + direction, distance));
+                self.distances[index] = distance;
+            }
+        }
+    }
+
+    fn index(&self, position: Position) -> usize {
+        ((position.y - self.min_y) * (self.max_x - self.min_x + 1) + (position.x - self.min_x))
+            as usize
     }
 
     fn draw(&self, droid_position: Position) {
@@ -275,10 +351,39 @@ impl Terrain {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
+    use super::*;
 
-    // #[test]
-    // fn it_works() {
-    //     assert!(1 < 2);
-    // }
+    #[test]
+    fn part_1() {
+        let program: Vec<i64> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+
+        let mut repair_droid = RepairDroid::new(&program, false);
+        repair_droid.map_terrain();
+        repair_droid
+            .terrain
+            .calculate_distances_from_oxygen_system();
+
+        let distance_to_oxygen_system = repair_droid.terrain.distance(Position { x: 0, y: 0 });
+        assert_eq!(212, distance_to_oxygen_system);
+    }
+
+    #[test]
+    fn part_2() {
+        let program: Vec<i64> = FileReader::new()
+            .split_char(',')
+            .read_from_file("input.txt")
+            .unwrap();
+
+        let mut repair_droid = RepairDroid::new(&program, false);
+        repair_droid.map_terrain();
+        repair_droid
+            .terrain
+            .calculate_distances_from_oxygen_system();
+
+        let max_distance = repair_droid.terrain.max_distance();
+        assert_eq!(358, max_distance);
+    }
 }
