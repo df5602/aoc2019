@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 aoc-util = { git = "https://github.com/df5602/aoc-util" }
+indicatif = "0.13.0"
