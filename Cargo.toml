@@ -19,4 +19,5 @@ members = [
     "14-space-stoichiometry",
     "15-oxygen-system",
     "16-flawed-frequency-transmission",
+    "17-set-and-forget",
 ]

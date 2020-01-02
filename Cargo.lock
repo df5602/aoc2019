@@ -127,6 +127,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "17-set-and-forget"
+version = "0.1.0"
+dependencies = [
+ "aoc-util 0.1.0 (git+https://github.com/df5602/aoc-util)",
+ "intcode 0.1.0",
+]
+
+[[package]]
 name = "adhoc_derive"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
